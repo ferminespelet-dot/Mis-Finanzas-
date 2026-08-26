@@ -318,18 +318,16 @@ def formatear_tarjeta_movimiento(tx):
 # ==============================================================
 with tab_registro:
     # --------------------------------------------------------
-    # NUEVO: Título y Saldo en la misma línea
-    col_titulo, col_saldo = st.columns([2, 1])
-    with col_titulo:
-        st.markdown("### 🎙️ Nuevo Registro")
-    with col_saldo:
-        st.markdown(f"""
-        <div style='text-align: right; background-color: rgba(16, 185, 129, 0.1); padding: 8px; border-radius: 8px; color: #10B981; font-weight: bold; margin-top: 15px;'>
-            Saldo: {simbolo_html}{saldo_real:,.0f}
-        </div>
-        """.replace(",", "."), unsafe_allow_html=True)
+    # SUPER SALDO DESTACADO ARRIBA DE TODO
+    st.markdown(f"""
+    <div style='background-color: rgba(16, 185, 129, 0.1); border: 2px solid rgba(16, 185, 129, 0.3); padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 25px;'>
+        <p style='margin: 0; font-size: 16px; color: gray; font-weight: 600;'>SALDO DISPONIBLE</p>
+        <h1 style='margin: 0; font-size: 52px; font-weight: 900; color: #10B981;'>{simbolo_html}{saldo_real:,.0f}</h1>
+    </div>
+    """.replace(",", "."), unsafe_allow_html=True)
     # --------------------------------------------------------
     
+    st.markdown("### 🎙️ Nuevo Registro")
     user_input = st.text_area("Registro", placeholder="Ej: Supermercado 20000, se pagó mitad y mitad...", height=100, label_visibility="collapsed")
     
     col1, col2 = st.columns(2)
@@ -435,12 +433,6 @@ with tab_registro:
                 save_table(f"Devoluciones_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], st.session_state.returns)
                 st.rerun()
             st.divider()
-    
-    st.divider()
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Saldo Real", f"{simbolo_moneda}{saldo_real:,.0f}".replace(",", "."))
-    col2.metric("Saldo Neto", f"{simbolo_moneda}{saldo_neto:,.0f}".replace(",", "."))
-    col3.metric("Gastos Ciclo", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
 
 # ==============================================================
 # PESTAÑA 2: SEGUNDO CEREBRO
