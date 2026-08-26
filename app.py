@@ -265,6 +265,7 @@ with tab1:
                     }}
                     """
                     
+                    # MODELO ACTUALIZADO
                     response = client.models.generate_content(
                         model='gemini-3.6-flash', 
                         contents=prompt
@@ -358,7 +359,7 @@ with tab2:
         if not df_g.empty:
             fig = px.pie(
                 df_g, values="monto", names="categoria", hole=0.4, 
-                color_discrete_sequence=px.colors.sequential.Oranges
+                color_discrete_sequence=px.colors.qualitative.Set1  # ¡PALETA DE COLORES CONTRASTANTES ACÁ!
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -479,6 +480,7 @@ with tab6:
                         "Devuelve ÚNICAMENTE un JSON válido (lista de objetos). "
                         f"Texto: '{raw_thought}'"
                     )
+                    # MODELO ACTUALIZADO
                     resp = client.models.generate_content(
                         model='gemini-3.6-flash', 
                         contents=prompt
