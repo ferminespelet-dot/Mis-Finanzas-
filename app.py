@@ -9,7 +9,7 @@ import requests
 
 st.set_page_config(page_title="Finanzas & Cerebro", page_icon="🍊", layout="centered")
 
-# Estética limpia: Solo le damos color Naranjita a los botones principales
+# Estética limpia
 st.markdown("""
 <style>
     .stButton>button[kind="primary"] {
@@ -32,13 +32,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# SISTEMA DE PERFILES (Estilo Netflix)
+# SISTEMA DE PERFILES
 # ==========================================
 st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
 usuario_actual = st.radio("👤 ¿Quién está usando la app?", ["Fermín", "Irina"], horizontal=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Si cambió el usuario, borramos la memoria temporal para no mezclar datos
 if "usuario_previo" not in st.session_state:
     st.session_state.usuario_previo = usuario_actual
 
@@ -48,7 +47,6 @@ if st.session_state.usuario_previo != usuario_actual:
             del st.session_state[key]
     st.session_state.usuario_previo = usuario_actual
 
-# Asignación dinámica de archivos: Fermín usa los originales, Irina usa los suyos
 sufijo = "" if usuario_actual == "Fermín" else "_irina"
 DATA_FILE = f"transactions{sufijo}.json"
 CATEGORIES_FILE = f"categories{sufijo}.json"
@@ -107,7 +105,6 @@ def get_dolar_blue():
 
 dolar_blue_venta = get_dolar_blue()
 
-# Ciclo financiero (Día 28)
 now = datetime.datetime.now()
 if now.day >= 28:
     current_cycle_start = datetime.datetime(now.year, now.month, 28)
@@ -116,12 +113,10 @@ else:
     current_cycle_start = datetime.datetime(now.year - 1, 12, 28) if now.month == 1 else datetime.datetime(now.year, now.month - 1, 28)
     next_cycle_start = datetime.datetime(now.year, now.month, 28)
 
-# Saludo personalizado
 icono = "🍊" if usuario_actual == "Fermín" else "🌸"
 st.title(f"Hola, {usuario_actual} {icono}")
 st.caption("Tu espacio de Finanzas & Cerebro")
 
-# 6 Pestañas limpias
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "💬 Registrar", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro"
 ])
@@ -137,11 +132,10 @@ total_ingresos = df_cycle[df_cycle["tipo"] == "ingreso"]["monto"].sum() if not d
 total_gastos = df_cycle[df_cycle["tipo"] == "gasto"]["monto"].sum() if not df_cycle.empty else 0
 saldo_actual = total_ingresos - total_gastos
 
-# PESTAÑA 1: REGISTRAR
 with tab1:
     st.markdown("### 🎙️ Registro Rápido")
     
-    user_input = st.text_area("Registro", placeholder="¿Qué gastaste o ingresaste hoy?\\nEj: Compré un alfajor por 2000...", height=100, label_visibility="collapsed")
+    user_input = st.text_area("Registro", placeholder="Ej: Compré un alfajor por 2000...", height=100, label_visibility="collapsed")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -173,6 +167,6 @@ with tab1:
                     """
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                     
-                    # Limpieza segura para el copiado
                     text_res = response.text.strip()
-                    text_res = text_res.replace("```json", "").replace("
+                    text_res = text_res.replace("```json", "")
+                    text_res = text_res.replace("
