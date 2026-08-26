@@ -6,8 +6,12 @@ import os
 from google import genai
 import plotly.express as px
 import requests
+import gspread
+from google.oauth2.service_account import Credentials
 
+# ==============================================================
 # 1. CONFIGURACIÓN DE PÁGINA Y ESTÉTICA
+# ==============================================================
 st.set_page_config(page_title="Finanzas & Cerebro", page_icon="🍊", layout="centered")
 
 st.markdown("""
@@ -31,16 +35,59 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. FUNCIONES BASE
-def load_json(filename, default):
-    if os.path.exists(filename):
-        with open(filename, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return default
+# ==============================================================
+# 2. CONEXIÓN A GOOGLE SHEETS (LA MEMORIA INMORTAL)
+# ==============================================================
+SCOPE = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
-def save_json(filename, data):
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+@st.cache_resource
+def get_sheet():
+    # Iniciamos sesión como el "robot"
+    creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
+    client = gspread.authorize(creds)
+    
+    # Abrimos el Excel
+    url = st.secrets["URL_EXCEL"]
+    sheet = client.open_by_url(url)
+    
+    # Verificamos si existe la pestaña 'BaseDatos', si no, la creamos
+    worksheet_list = [ws.title for ws in sheet.worksheets()]
+    if "BaseDatos" in worksheet_list:
+        worksheet = sheet.worksheet("BaseDatos")
+    else:
+        worksheet = sheet.add_worksheet(title="BaseDatos", rows="1000", cols="2")
+        worksheet.update_acell("A1", "Clave")
+        worksheet.update_acell("B1", "Datos_JSON")
+        
+    return worksheet
+
+def load_data(key, default):
+    try:
+        ws = get_sheet()
+        try:
+            cell = ws.find(key, in_column=1)
+            val = ws.cell(cell.row, 2).value
+            return json.loads(val)
+        except Exception:
+            return default  # Si no encuentra la fila, devuelve lo predeterminado
+    except Exception as e:
+        return default
+
+def save_data(key, data):
+    try:
+        ws = get_sheet()
+        data_str = json.dumps(data, ensure_ascii=False)
+        try:
+            cell = ws.find(key, in_column=1)
+            ws.update_cell(cell.row, 2, data_str) # Actualiza si ya existe
+        except Exception:
+            ws.append_row([key, data_str]) # Crea nueva fila si no existe
+    except Exception as e:
+        st.error(f"Error de base de datos al guardar: {e}")
 
 def get_dolar_blue():
     try:
@@ -67,8 +114,7 @@ def cerrar_sesion():
     st.rerun()
 
 # 3. GESTIÓN DE SEGURIDAD (PIN)
-PINS_FILE = "pins_security.json"
-passwords_guardadas = load_json(PINS_FILE, {})
+passwords_guardadas = load_data("pins_security", {})
 
 if "usuario_autenticado" not in st.session_state:
     st.session_state.usuario_autenticado = None
@@ -103,7 +149,7 @@ if st.session_state.usuario_autenticado is None:
                 if nuevo_pin and nuevo_pin.isdigit():
                     if nuevo_pin == confirmar_pin:
                         passwords_guardadas[usuario_seleccionado] = nuevo_pin
-                        save_json(PINS_FILE, passwords_guardadas)
+                        save_data("pins_security", passwords_guardadas)
                         st.success("¡PIN creado con éxito!")
                         iniciar_sesion(usuario_seleccionado)
                     else:
@@ -118,13 +164,13 @@ if st.session_state.usuario_autenticado is None:
 # ==============================================================
 usuario_actual = st.session_state.usuario_autenticado
 
-# 100% INDEPENDENCIA DE ARCHIVOS
-sufijo = "" if usuario_actual == "Fermín" else "_irina"
-DATA_FILE = f"transactions{sufijo}.json"
-CATEGORIES_FILE = f"categories{sufijo}.json"
-SAVINGS_FILE = f"savings{sufijo}.json"
-THOUGHTS_FILE = f"thoughts{sufijo}.json"
-PENDINGS_FILE = f"pendings{sufijo}.json"
+# 100% INDEPENDENCIA DE DATOS (Las claves de búsqueda en Google Sheets)
+sufijo = "Fermin" if usuario_actual == "Fermín" else "Irina"
+DATA_KEY = f"transactions_{sufijo}"
+CATEGORIES_KEY = f"categories_{sufijo}"
+SAVINGS_KEY = f"savings_{sufijo}"
+THOUGHTS_KEY = f"thoughts_{sufijo}"
+PENDINGS_KEY = f"pendings_{sufijo}"
 
 def obtener_categorias_iniciales(usuario):
     base = {
@@ -153,15 +199,15 @@ def obtener_categorias_iniciales(usuario):
     return base
 
 if "categories" not in st.session_state:
-    st.session_state.categories = load_json(CATEGORIES_FILE, obtener_categorias_iniciales(usuario_actual))
+    st.session_state.categories = load_data(CATEGORIES_KEY, obtener_categorias_iniciales(usuario_actual))
 if "transactions" not in st.session_state:
-    st.session_state.transactions = load_json(DATA_FILE, [])
+    st.session_state.transactions = load_data(DATA_KEY, [])
 if "savings" not in st.session_state:
-    st.session_state.savings = load_json(SAVINGS_FILE, [])
+    st.session_state.savings = load_data(SAVINGS_KEY, [])
 if "thoughts" not in st.session_state:
-    st.session_state.thoughts = load_json(THOUGHTS_FILE, [])
+    st.session_state.thoughts = load_data(THOUGHTS_KEY, [])
 if "pendings" not in st.session_state:
-    st.session_state.pendings = load_json(PENDINGS_FILE, [])
+    st.session_state.pendings = load_data(PENDINGS_KEY, [])
 if "recomendacion_ia" not in st.session_state:
     st.session_state.recomendacion_ia = ""
 
@@ -189,7 +235,7 @@ else:
 
 icono = "🍊" if usuario_actual == "Fermín" else "🌸"
 st.title(f"Hola, {usuario_actual} {icono}")
-st.caption(f"Tu espacio de Finanzas & Cerebro (Sesión Privada)")
+st.caption(f"Tu espacio de Finanzas & Cerebro (Memoria Inmortal Activada ☁️)")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro"
@@ -283,7 +329,7 @@ with tab1:
                         tx["timestamp"] = ts
                         st.session_state.transactions.append(tx)
                     
-                    save_json(DATA_FILE, st.session_state.transactions)
+                    save_data(DATA_KEY, st.session_state.transactions) # GUARDA EN LA NUBE
                     
                     st.session_state["last_added"] = new_txs
                     st.session_state.recomendacion_ia = recomendacion
@@ -308,7 +354,7 @@ with tab1:
                     "monto": p_monto,
                     "fecha": str(p_fecha)
                 })
-                save_json(PENDINGS_FILE, st.session_state.pendings)
+                save_data(PENDINGS_KEY, st.session_state.pendings)
                 st.success("¡Guardado!")
                 st.rerun()
 
@@ -333,7 +379,7 @@ with tab1:
             with col_b:
                 if st.button("✅ Pagado", key=f"del_p_{row['id']}"):
                     st.session_state.pendings = [p for p in st.session_state.pendings if p["id"] != row["id"]]
-                    save_json(PENDINGS_FILE, st.session_state.pendings)
+                    save_data(PENDINGS_KEY, st.session_state.pendings)
                     st.rerun()
             st.divider()
 
@@ -394,7 +440,7 @@ with tab3:
         if st.button("🗑️ Deshacer / Borrar último movimiento"):
             if st.session_state.transactions:
                 st.session_state.transactions.pop()
-                save_json(DATA_FILE, st.session_state.transactions)
+                save_data(DATA_KEY, st.session_state.transactions)
                 st.success("Movimiento borrado exitosamente.")
                 st.session_state.recomendacion_ia = ""
                 st.rerun()
@@ -421,7 +467,7 @@ with tab4:
                     "cotizacion_blue": dolar_blue_venta, 
                     "dolares": usd
                 })
-                save_json(SAVINGS_FILE, st.session_state.savings)
+                save_data(SAVINGS_KEY, st.session_state.savings)
                 st.success(f"¡Guardados US$ {usd:.2f} en tu alcancía!")
     with cb:
         if st.button("📥 Mantener como saldo", use_container_width=True):
@@ -447,7 +493,7 @@ with tab5:
         if st.form_submit_button("Agregar Categoría") and n_name:
             lista_keys = [k.strip().lower() for k in n_keys.split(",")]
             st.session_state.categories[n_name.strip()] = lista_keys
-            save_json(CATEGORIES_FILE, st.session_state.categories)
+            save_data(CATEGORIES_KEY, st.session_state.categories)
             st.success("Categoría agregada correctamente.")
             st.rerun()
             
@@ -455,7 +501,7 @@ with tab5:
         st.markdown(f"- **{cat}**: {', '.join(keys)}")
 
 # ==============================================================
-# PESTAÑA 6: SEGUNDO CEREBRO (LISTA DESCENDENTE REDISEÑADA)
+# PESTAÑA 6: SEGUNDO CEREBRO 
 # ==============================================================
 with tab6:
     st.subheader("🧠 Segundo Cerebro")
@@ -502,7 +548,7 @@ with tab6:
                         }
                         st.session_state.thoughts.append(thread_obj)
                     
-                    save_json(THOUGHTS_FILE, st.session_state.thoughts)
+                    save_data(THOUGHTS_KEY, st.session_state.thoughts)
                     st.success("¡Hilos creados y guardados!")
                     st.rerun()
                 except Exception as e:
@@ -510,20 +556,16 @@ with tab6:
 
     st.divider()
     
-    # NUEVO SISTEMA VISUAL: LISTA ORDENADA DE MÁS RECIENTE A MÁS ANTIGUO
     if st.session_state.thoughts:
-        # Ordenamos los hilos usando el ID (que funciona como fecha/hora exacta) de mayor a menor
         hilos_ordenados = sorted(st.session_state.thoughts, key=lambda x: x["id"], reverse=True)
         
         for t in hilos_ordenados:
             with st.expander(f"📌 [{t['categoria']}] {t['titulo']} ({t['creado']})"):
                 
-                # Mostrar los mensajes del hilo
                 for msg in t["mensajes"]:
                     with st.chat_message("user" if msg["autor"]=="usuario" else "assistant"):
                         st.write(msg["texto"])
                 
-                # Formulario para agregar más notas a este hilo
                 with st.form(f"chat_form_{t['id']}", clear_on_submit=True):
                     reply = st.text_input("Agregar nota a este hilo...", key=f"input_{t['id']}")
                     if st.form_submit_button("Enviar"):
@@ -531,13 +573,12 @@ with tab6:
                             for orig_t in st.session_state.thoughts:
                                 if orig_t["id"] == t["id"]:
                                     orig_t["mensajes"].append({"autor": "usuario", "texto": reply})
-                            save_json(THOUGHTS_FILE, st.session_state.thoughts)
+                            save_data(THOUGHTS_KEY, st.session_state.thoughts)
                             st.rerun()
                 
-                # Botón para borrar el hilo completo
                 if st.button("🗑️ Eliminar hilo completo", key=f"del_{t['id']}"):
                     st.session_state.thoughts = [orig_t for orig_t in st.session_state.thoughts if orig_t["id"] != t["id"]]
-                    save_json(THOUGHTS_FILE, st.session_state.thoughts)
+                    save_data(THOUGHTS_KEY, st.session_state.thoughts)
                     st.rerun()
     else:
         st.info("Aún no tienes notas guardadas en tu Segundo Cerebro.")
