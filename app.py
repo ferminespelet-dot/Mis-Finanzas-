@@ -22,7 +22,6 @@ st.markdown("""
         background-color: #B45309;
         color: white;
     }
-    /* Pequeño ajuste para que las métricas se vean lindas */
     div[data-testid="stMetric"] {
         background-color: rgba(217, 119, 6, 0.05);
         padding: 10px;
@@ -32,11 +31,30 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-DATA_FILE = "transactions.json"
-CATEGORIES_FILE = "categories.json"
-SAVINGS_FILE = "savings.json"
-THOUGHTS_FILE = "thoughts.json"
-PENDINGS_FILE = "pendings.json"
+# ==========================================
+# SISTEMA DE PERFILES (Estilo Netflix)
+# ==========================================
+st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+usuario_actual = st.radio("👤 ¿Quién está usando la app?", ["Fermín", "Irina"], horizontal=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Si cambió el usuario, borramos la memoria temporal para no mezclar datos
+if "usuario_previo" not in st.session_state:
+    st.session_state.usuario_previo = usuario_actual
+
+if st.session_state.usuario_previo != usuario_actual:
+    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "last_added"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.session_state.usuario_previo = usuario_actual
+
+# Asignación dinámica de archivos: Fermín usa los originales, Irina usa los suyos
+sufijo = "" if usuario_actual == "Fermín" else "_irina"
+DATA_FILE = f"transactions{sufijo}.json"
+CATEGORIES_FILE = f"categories{sufijo}.json"
+SAVINGS_FILE = f"savings{sufijo}.json"
+THOUGHTS_FILE = f"thoughts{sufijo}.json"
+PENDINGS_FILE = f"pendings{sufijo}.json"
 
 DEFAULT_CATEGORIES = {
     "Irina": ["irina", "iri", "novia", "romántico", "regalos", "compré a ella", "ella"],
@@ -98,7 +116,9 @@ else:
     current_cycle_start = datetime.datetime(now.year - 1, 12, 28) if now.month == 1 else datetime.datetime(now.year, now.month - 1, 28)
     next_cycle_start = datetime.datetime(now.year, now.month, 28)
 
-st.title("Hola, Fermín 🍊")
+# Saludo personalizado
+icono = "🍊" if usuario_actual == "Fermín" else "🌸"
+st.title(f"Hola, {usuario_actual} {icono}")
 st.caption("Tu espacio de Finanzas & Cerebro")
 
 # 6 Pestañas limpias
@@ -121,7 +141,7 @@ saldo_actual = total_ingresos - total_gastos
 with tab1:
     st.markdown("### 🎙️ Registro Rápido")
     
-    user_input = st.text_area("", placeholder="¿Qué gastaste o ingresaste hoy?\\nEj: Compré un alfajor por 2000 y cargué la SUBE...", height=100, label_visibility="collapsed")
+    user_input = st.text_area("Registro", placeholder="¿Qué gastaste o ingresaste hoy?\\nEj: Compré un alfajor por 2000...", height=100, label_visibility="collapsed")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -130,7 +150,7 @@ with tab1:
         procesar = st.button("✨ Procesar", type="primary", use_container_width=True)
 
     if mic_clicked:
-        st.info("💡 Consejo: Toca la caja de texto y presiona el ícono del micrófono en el teclado de tu iPhone para dictar rápidamente.")
+        st.info("💡 Consejo: Toca la caja de texto y presiona el ícono del micrófono en el teclado de tu celular.")
 
     if procesar:
         if not api_key:
@@ -152,6 +172,7 @@ with tab1:
                     Texto: "{user_input}"
                     """
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                    
+                    # Limpieza segura para el copiado
                     text_res = response.text.strip()
-                    if text_res.startswith("```json"): text_res = text_res[7:]
-                    if text_res.endswith("
+                    text_res = text_res.replace("```json", "").replace("
