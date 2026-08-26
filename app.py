@@ -201,6 +201,9 @@ user_settings = load_config(f"settings_{sufijo}", {
 DIA_CIERRE = user_settings.get("dia_cierre", 28)
 DIVISA = user_settings.get("divisa", "ARS")
 simbolo_moneda = "$" if DIVISA == "ARS" else f"{DIVISA} "
+# Reemplazo del símbolo para evitar bugs de LaTeX en HTML:
+simbolo_html = "&#36;" if DIVISA == "ARS" else f"{DIVISA} "
+
 dolar_blue_venta = get_dolar_blue()
 
 def obtener_categorias_iniciales(usr):
@@ -280,7 +283,7 @@ tab_registro, tab_cerebro, tab_wishlist, tab_balance, tab_historial, tab_ciclos,
 def formatear_tarjeta_movimiento(tx):
     color = "#10B981" if tx["tipo"] == "ingreso" else "#EF4444"
     signo = "+" if tx["tipo"] == "ingreso" else "-"
-    monto_str = f"{signo} {simbolo_moneda}{tx['monto']:,.0f}".replace(",", ".")
+    monto_str = f"{signo} {simbolo_html}{tx['monto']:,.0f}".replace(",", ".")
     cat = str(tx.get("categoria", "Otros")).capitalize()
     desc = str(tx.get("descripcion", "")).capitalize()
     fecha_formateada = tx['timestamp'][:16].replace("-", "/")
@@ -298,7 +301,7 @@ def formatear_tarjeta_movimiento(tx):
     """, unsafe_allow_html=True)
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO
+# PESTAÑA 1: REGISTRO (ABRE POR DEFECTO)
 # ==============================================================
 with tab_registro:
     st.markdown("### 🎙️ Nuevo Registro")
@@ -378,7 +381,7 @@ with tab_registro:
                     st.rerun()
 
         for row in [p for p in st.session_state.pendings if p.get("estado") == "pendiente"]:
-            st.markdown(f"**{row['concepto']}**<br><span style='color:#EF4444;'>- {simbolo_moneda}{row['monto']:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
+            st.markdown(f"**{row['concepto']}**<br><span style='color:#EF4444;'>- {simbolo_html}{row['monto']:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
             if st.button("✅ Pagado", key=f"p_{row['id']}"):
                 st.session_state.transactions.append({"timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tipo": "gasto", "monto": row["monto"], "descripcion": f"Pago: {row['concepto']}", "categoria": "Otros"})
                 save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
@@ -399,7 +402,7 @@ with tab_registro:
                     st.rerun()
 
         for row in [r for r in st.session_state.returns if r.get("estado") == "pendiente"]:
-            st.markdown(f"**{row['concepto']}**<br><span style='color:#10B981;'>+ {simbolo_moneda}{row['monto']:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
+            st.markdown(f"**{row['concepto']}**<br><span style='color:#10B981;'>+ {simbolo_html}{row['monto']:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
             if st.button("📥 Devuelto", key=f"r_{row['id']}"):
                 st.session_state.transactions.append({"timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tipo": "ingreso", "monto": row["monto"], "descripcion": f"Devolución: {row['concepto']}", "categoria": "Devoluciones"})
                 save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
@@ -611,7 +614,7 @@ with tab_wishlist:
                     
                     # Total formateado correctamente
                     str_ars = f"{t_ars:,.0f}".replace(",", ".")
-                    st.markdown(f"#### 💰 Total Final: <span style='color:#10B981;'>{simbolo_moneda}{str_ars}</span> <span style='font-size:16px; color:#A0A0A0;'>(US$ {t_usd:,.2f})</span>", unsafe_allow_html=True)
+                    st.markdown(f"#### 💰 Total Final: <span style='color:#10B981;'>{simbolo_html}{str_ars}</span> <span style='font-size:16px; color:#A0A0A0;'>(US&#36; {t_usd:,.2f})</span>", unsafe_allow_html=True)
                     st.caption(f"⏱️ **Entrega estimada:** {opc.get('tiempo_entrega', '')} | 📝 **Notas:** {opc.get('notas', '')}")
                 
                 with col2:
@@ -662,7 +665,7 @@ with tab_wishlist:
                     ars_val = float(w.get('precio_ars', 0))
                     usd_val = float(w.get('precio_usd', 0))
                     str_ars = f"{ars_val:,.0f}".replace(",", ".")
-                    st.markdown(f"<h4 style='color:#10B981; margin-top:0px;'>{simbolo_moneda}{str_ars} <span style='font-size:14px; color:#A0A0A0;'>(US$ {usd_val:,.2f})</span></h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='color:#10B981; margin-top:0px;'>{simbolo_html}{str_ars} <span style='font-size:14px; color:#A0A0A0;'>(US&#36; {usd_val:,.2f})</span></h4>", unsafe_allow_html=True)
                     if w.get('notas'):
                         st.caption(f"📝 {w['notas']}")
                 with cw2:
@@ -725,8 +728,8 @@ with tab_historial:
         df_display["Descripción"] = df_display["descripcion"].str.capitalize()
         
         def format_monto(row):
-            if row["tipo"] == "ingreso": return f"+ {simbolo_moneda}{row['monto']:,.0f}".replace(",", ".")
-            else: return f"- {simbolo_moneda}{row['monto']:,.0f}".replace(",", ".")
+            if row["tipo"] == "ingreso": return f"+ {simbolo_html}{row['monto']:,.0f}".replace(",", ".")
+            else: return f"- {simbolo_html}{row['monto']:,.0f}".replace(",", ".")
                 
         df_display["Monto"] = df_display.apply(format_monto, axis=1)
         df_display = df_display[["Fecha", "Categoría", "Descripción", "Monto"]]
