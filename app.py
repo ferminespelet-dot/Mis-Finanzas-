@@ -134,7 +134,7 @@ def cerrar_sesion():
     st.rerun()
 
 # ==============================================================
-# 3. PANTALLA DE LOGIN DIRECTO (SIN PIN POR DEFECTO)
+# 3. PANTALLA DE LOGIN DIRECTO
 # ==============================================================
 if "usuario_autenticado" not in st.session_state:
     st.session_state.usuario_autenticado = None
@@ -270,7 +270,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro", "⚙️ Ajustes"
 ])
 
-# Funciones UI
 def formatear_tarjeta_movimiento(tx):
     color = "#10B981" if tx["tipo"] == "ingreso" else "#EF4444"
     signo = "+" if tx["tipo"] == "ingreso" else "-"
@@ -292,24 +291,10 @@ def formatear_tarjeta_movimiento(tx):
     """, unsafe_allow_html=True)
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO (CON MITAD Y MITAD)
+# PESTAÑA 1: REGISTRO (ARRIBA DE TODO)
 # ==============================================================
 with tab1:
-    # WIDGET ESTILO MERCADO PAGO
-    st.subheader("⏱️ Última Actividad")
-    if st.session_state.transactions:
-        tx_ordenadas = sorted(st.session_state.transactions, key=lambda x: x['timestamp'], reverse=True)
-        formatear_tarjeta_movimiento(tx_ordenadas[0])
-        
-        if len(tx_ordenadas) > 1:
-            with st.expander("Ver otros recientes..."):
-                for tx in tx_ordenadas[1:5]:
-                    formatear_tarjeta_movimiento(tx)
-    else:
-        st.info("Aún no tienes movimientos.")
-    
-    st.divider()
-
+    # 1. EL REGISTRO VA PRIMERO (Más accesible al dedo)
     st.markdown("### 🎙️ Nuevo Registro")
     user_input = st.text_area("Registro", placeholder="Ej: Supermercado 20000, se pagó mitad y mitad...", height=100, label_visibility="collapsed")
     
@@ -359,7 +344,23 @@ with tab1:
                 st.error(f"Error IA: {e}")
 
     st.divider()
+
+    # 2. ÚLTIMA ACTIVIDAD (Abajo del registro)
+    st.subheader("⏱️ Última Actividad")
+    if st.session_state.transactions:
+        tx_ordenadas = sorted(st.session_state.transactions, key=lambda x: x['timestamp'], reverse=True)
+        formatear_tarjeta_movimiento(tx_ordenadas[0])
+        
+        if len(tx_ordenadas) > 1:
+            with st.expander("Ver otros recientes..."):
+                for tx in tx_ordenadas[1:5]:
+                    formatear_tarjeta_movimiento(tx)
+    else:
+        st.info("Aún no tienes movimientos.")
     
+    st.divider()
+    
+    # 3. PENDIENTES Y DEVOLUCIONES
     col_izq, col_der = st.columns(2)
     with col_izq:
         st.subheader("📌 Pendientes")
@@ -402,22 +403,41 @@ with tab1:
                 save_table(f"Devoluciones_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], st.session_state.returns)
                 st.rerun()
             st.divider()
-
+    
+    st.divider()
     col1, col2, col3 = st.columns(3)
     col1.metric("Saldo Real", f"{simbolo_moneda}{saldo_actual:,.0f}".replace(",", "."))
     col2.metric("Saldo Neto", f"{simbolo_moneda}{saldo_neto:,.0f}".replace(",", "."))
     col3.metric("Gastos Ciclo", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
 
 # ==============================================================
-# PESTAÑA 2: BALANCE
+# PESTAÑA 2: BALANCE (GRÁFICO MEJORADO)
 # ==============================================================
 with tab2:
     st.subheader("📊 Gastos por Categoría")
     if not df_cycle.empty and not df_cycle[df_cycle["tipo"] == "gasto"].empty:
         df_g = df_cycle[df_cycle["tipo"] == "gasto"].groupby("categoria")["monto"].sum().reset_index().sort_values(by="monto", ascending=False)
-        fig = px.pie(df_g, values="monto", names="categoria", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set1)
-        # Formateo con puntos en lugar de comas
-        fig.update_traces(textinfo='label+value', texttemplate=f'%{{label}}: {simbolo_moneda}%{{value:,.0f}}')
+        
+        # Diseño Premium para la torta
+        fig = px.pie(df_g, values="monto", names="categoria", hole=0.45, color_discrete_sequence=px.colors.qualitative.Pastel)
+        
+        fig.update_traces(
+            textinfo='label+value', 
+            texttemplate=f'<b>%{{label}}</b><br>{simbolo_moneda}%{{value:,.0f}}',
+            textfont_size=15,
+            textfont_family="Arial, sans-serif",
+            textfont_color="white",
+            marker=dict(line=dict(color='#0e1117', width=2))
+        )
+        
+        fig.update_layout(
+            showlegend=False,
+            margin=dict(t=30, b=30, l=30, r=30),
+            separators=".,",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)"
+        )
+        
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No hay gastos registrados en este ciclo mensual.")
@@ -637,7 +657,7 @@ with tab7:
     mes_reporte = st.selectbox("Elegir Mes", [meses_anio[now.month - 1], meses_anio[now.month - 2]])
     if st.button("Generar Reporte Imprimible"):
         st.markdown(f"### Reporte Financiero: {mes_reporte}")
-        st.write(f"**Usuario:** {usuario} | **Gastos Totales:** {simbolo_moneda}{total_gastos:,.0f}")
+        st.write(f"**Usuario:** {usuario} | **Gastos Totales:** {simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
         st.dataframe(df_cycle[["timestamp", "categoria", "monto"]].sort_values(by="timestamp"))
         st.components.v1.html("<script>window.print();</script>", height=0)
 
