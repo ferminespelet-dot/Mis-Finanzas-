@@ -117,14 +117,12 @@ total_ingresos = df_cycle[df_cycle["tipo"] == "ingreso"]["monto"].sum() if not d
 total_gastos = df_cycle[df_cycle["tipo"] == "gasto"]["monto"].sum() if not df_cycle.empty else 0
 saldo_actual = total_ingresos - total_gastos
 
-# PESTAÑA 1: REGISTRAR (Diseño móvil optimizado)
+# PESTAÑA 1: REGISTRAR
 with tab1:
     st.markdown("### 🎙️ Registro Rápido")
     
-    # Caja de texto ocupa todo el ancho
-    user_input = st.text_area("", placeholder="¿Qué gastaste o ingresaste hoy?\nEj: Compré un alfajor por 2000 y cargué la SUBE...", height=100, label_visibility="collapsed")
+    user_input = st.text_area("", placeholder="¿Qué gastaste o ingresaste hoy?\\nEj: Compré un alfajor por 2000 y cargué la SUBE...", height=100, label_visibility="collapsed")
     
-    # Botones parejos uno al lado del otro
     col1, col2 = st.columns(2)
     with col1:
         mic_clicked = st.button("🎙️ Usar Micrófono", use_container_width=True)
