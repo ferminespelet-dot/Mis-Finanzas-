@@ -126,24 +126,25 @@ SAVINGS_FILE = f"savings{sufijo}.json"
 THOUGHTS_FILE = f"thoughts{sufijo}.json"
 PENDINGS_FILE = f"pendings{sufijo}.json"
 
-# GENERADOR DE CATEGORÍAS PERSONALIZADAS POR USUARIO
 def obtener_categorias_iniciales(usuario):
     base = {
         "Fútbol y Cancha": ["futbol", "fútbol", "cancha", "pelota", "choripan", "entrada", "estudiantes", "el pincha", "pincha", "estadio"],
-        "Paseos y Salidas": ["museos", "museo", "paseo", "capital", "buenos aires", "helado", "cerveza", "barcito", "salidas"],
+        "Paseos y Salidas": ["museos", "museo", "paseo", "capital", "buenos aires", "helado", "barcito", "salidas", "cine", "teatro"],
         "Bolucompras": ["bolucompras", "boludeces", "chucherias", "kiosco", "alfajor", "gomitas", "energizante"],
-        "Librería y Facu": ["libreria", "útiles escolares", "fotocopias", "gomaeva", "articulos para el jardin", "marionetas", "tela", "temperas", "pintura", "jardín"],
-        "Supermercado": ["supermercado", "super", "almacén", "verdulería", "hiper"],
-        "Comida y Delivery": ["comida", "hamburguesa", "pizza", "delivery", "pedidosya", "rappi"],
-        "Transporte": ["sube", "colectivo", "tren", "uber", "taxi", "nafta"],
+        "Librería y Facu": ["libreria", "librería", "útiles escolares", "fotocopias", "gomaeva", "articulos para el jardin", "marionetas", "tela", "temperas", "pintura", "jardín", "apuntes"],
+        "Supermercado": ["supermercado", "super", "almacén", "verdulería", "hiper", "carnicería"],
+        "Comida y Delivery": ["comida", "hamburguesa", "pizza", "delivery", "pedidosya", "rappi", "almuerzo", "cena"],
+        "Café y panadería": ["café", "merienda", "torta", "panadería", "facturas", "medialunas", "desayuno"],
+        "Bazar": ["bazar", "poster", "póster", "sahumerios", "plantas", "detalles", "decoración", "regalería"],
+        "Bebida": ["vino", "cerveza", "alcohol", "fernet", "vodka", "escabio", "tragos"],
+        "Transporte": ["sube", "colectivo", "tren", "uber", "taxi", "nafta", "peaje"],
         "Suscripciones": ["netflix", "spotify", "gimnasio", "internet", "celular"],
-        "Tabaco": ["cigarrillos", "tabaco", "filtros", "pucho"],
-        "Música": ["cuerdas", "púas", "cables", "sala", "música", "recitales"],
+        "Tabaco": ["cigarrillos", "tabaco", "filtros", "pucho", "papelillos"],
+        "Música": ["cuerdas", "púas", "cables", "sala", "música", "recitales", "ensayo"],
         "Devoluciones": ["devuelve", "devolvió", "reembolso"],
-        "Otros": ["ropa", "perdí", "stickers"]
+        "Otros": ["ropa", "perdí", "stickers", "varios"]
     }
     
-    # INDEPENDENCIA DE PAREJA
     if usuario == "Fermín":
         base["Irina"] = ["irina", "iri", "novia", "amor", "regalos", "flores a iri", "ella"]
     else:
@@ -164,7 +165,6 @@ if "pendings" not in st.session_state:
 if "recomendacion_ia" not in st.session_state:
     st.session_state.recomendacion_ia = ""
 
-# BARRA LATERAL
 st.sidebar.header("⚙️ Configuración")
 api_key = st.sidebar.text_input("Gemini API Key", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 st.sidebar.divider()
@@ -173,7 +173,6 @@ if st.sidebar.button("🚪 Cerrar Sesión", type="primary"):
 
 dolar_blue_venta = get_dolar_blue()
 
-# Cálculos del Ciclo (Día 28)
 now = datetime.datetime.now()
 if now.day >= 28:
     current_cycle_start = datetime.datetime(now.year, now.month, 28)
@@ -190,13 +189,12 @@ else:
 
 icono = "🍊" if usuario_actual == "Fermín" else "🌸"
 st.title(f"Hola, {usuario_actual} {icono}")
-st.caption(f"Tu espacio de Finanzas & Cerebro (Sesión 100% Privada)")
+st.caption(f"Tu espacio de Finanzas & Cerebro (Sesión Privada)")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro"
 ])
 
-# Procesamiento de DataFrames
 df_tx = pd.DataFrame(st.session_state.transactions)
 if not df_tx.empty:
     df_tx["timestamp_dt"] = pd.to_datetime(df_tx["timestamp"])
@@ -215,7 +213,7 @@ saldo_actual = total_ingresos - total_gastos
 dias_faltantes = (next_cycle_start - datetime.datetime.now()).days
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO (CON APRENDIZAJE IA)
+# PESTAÑA 1: REGISTRO 
 # ==============================================================
 with tab1:
     st.markdown("### 🎙️ Registro Rápido")
@@ -245,19 +243,17 @@ with tab1:
                     client = genai.Client(api_key=api_key)
                     cat_list = list(st.session_state.categories.keys())
                     
-                    # HISTORIAL PARA APRENDIZAJE: Le pasamos los últimos 5 gastos para que entienda el contexto
                     historial_reciente = ""
                     if not df_cycle.empty:
-                        ultimos_gastos = df_cycle.tail(5)[["descripcion", "categoria", "monto"]].to_dict('records')
-                        historial_reciente = f"Tus últimos gastos fueron: {ultimos_gastos}."
+                        ultimos_gastos = df_cycle.tail(10)[["descripcion", "categoria", "monto"]].to_dict('records')
+                        historial_reciente = f"Tus últimos 10 gastos fueron: {ultimos_gastos}."
                     
                     prompt = f"""
-                    Eres un asistente financiero personal experto de {usuario_actual}.
+                    Eres un asistente financiero personal experto de {usuario_actual}. 
                     Categorías válidas: {json.dumps(cat_list, ensure_ascii=False)}.
-                    Saldo actual: ${saldo_actual}. Días hasta cobrar: {dias_faltantes}.
+                    Saldo actual: ${saldo_actual}. Días hasta cobrar (cierre 28): {dias_faltantes}.
                     {historial_reciente}
                     
-                    Aprende del historial para deducir categorías de rutinas.
                     Analiza este nuevo texto: "{user_input}"
                     
                     Devuelve ESTRICTAMENTE este JSON:
@@ -265,11 +261,10 @@ with tab1:
                         "movimientos": [
                             {{"tipo": "gasto" o "ingreso", "monto": numero_exacto, "descripcion": "detalle", "categoria": "CATEGORIA_VALIDA"}}
                         ],
-                        "recomendacion": "OPCIONAL. Escribe un mensaje (con un emoji) SOLO si el usuario está gastando muy rápido dado su saldo y días restantes, o si notas un patrón nuevo y le sugieres crear una nueva categoría. Si todo está normal, deja esto vacío ''."
+                        "recomendacion": "OPCIONAL. Escribe un mensaje (con un emoji) SOLO si el usuario está gastando muy rápido dado su saldo y días restantes, o si notas un patrón repetitivo nuevo. Si todo está normal, debes dejar esto completamente vacío ''."
                     }}
                     """
                     
-                    # ACTUALIZADO AL ÚLTIMO MODELO DE GOOGLE
                     response = client.models.generate_content(
                         model='gemini-1.5-flash', 
                         contents=prompt
@@ -372,7 +367,7 @@ with tab2:
         st.info("No hay registros en este ciclo.")
 
 # ==============================================================
-# PESTAÑA 3: HISTORIAL
+# PESTAÑA 3: HISTORIAL (CON EXPORTACIÓN A EXCEL)
 # ==============================================================
 with tab3:
     st.subheader("📜 Todos los Movimientos")
@@ -386,6 +381,16 @@ with tab3:
             df_show = df_show[filtro_desc | filtro_cat]
             
         st.dataframe(df_show, use_container_width=True)
+        
+        # EL BOTÓN MÁGICO DE EXPORTACIÓN (CSV para abrir en Excel)
+        csv = df_show.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Descargar Historial en Excel (CSV)",
+            data=csv,
+            file_name=f"historial_finanzas_{usuario_actual}.csv",
+            mime="text/csv",
+        )
+        st.divider()
         
         if st.button("🗑️ Deshacer / Borrar último movimiento"):
             if st.session_state.transactions:
