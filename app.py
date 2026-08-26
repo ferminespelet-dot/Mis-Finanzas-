@@ -273,7 +273,6 @@ st.caption(f"Faltan **{max(0, dias_faltantes)} días** para el final de tu ciclo
 if now.day == DIA_CIERRE:
     st.warning(f"💰 **¡Es día de cierre!** Revisa tus saldos y mueve tu sobrante a los bolsillos en la pestaña 'Ciclos'.")
 
-# ORDEN DE PESTAÑAS (Registro primero para que abra por defecto)
 tab_registro, tab_cerebro, tab_wishlist, tab_balance, tab_historial, tab_ciclos, tab_categorias, tab_ajustes = st.tabs([
     "💬 Registro", "🧠 Cerebro", "🎁 Wishlist", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "⚙️ Ajustes"
 ])
@@ -299,7 +298,7 @@ def formatear_tarjeta_movimiento(tx):
     """, unsafe_allow_html=True)
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO (ABRE POR DEFECTO)
+# PESTAÑA 1: REGISTRO
 # ==============================================================
 with tab_registro:
     st.markdown("### 🎙️ Nuevo Registro")
@@ -536,32 +535,79 @@ with tab_cerebro:
         st.info("Aún no tienes notas guardadas.")
 
 # ==============================================================
-# PESTAÑA 3: WISHLIST (IA BÚSQUEDA DE PRECIOS)
+# PESTAÑA 3: WISHLIST (IA BÚSQUEDA DE PRECIOS E INTEGRACIÓN)
 # ==============================================================
 with tab_wishlist:
     st.markdown("<h2 style='text-align:center;'>🎁 Lista de Deseos</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>Anota lo que querés comprar, o pedile a la IA que compare precios.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>Buscá un producto y la IA armará opciones listas para guardar.</p>", unsafe_allow_html=True)
     
     st.subheader("🔍 Asistente de Compras (IA)")
-    search_query = st.text_input("¿Qué producto buscás?", placeholder="Ej: iPhone 16 Pro Max")
+    search_query = st.text_input("¿Qué producto buscás?", placeholder="Ej: PlayStation 5, Zapatillas Nike...")
+    
     if st.button("Buscar y Comparar Precios", type="primary", use_container_width=True):
         if not api_key:
             st.error("Falta tu API Key.")
         elif not search_query.strip():
             st.warning("Escribe un producto para buscar.")
         else:
-            with st.spinner("Analizando mercado y calculando impuestos..."):
+            with st.spinner("Analizando mercado, impuestos y armando opciones..."):
                 try:
                     client = genai.Client(api_key=api_key)
-                    prompt = f"Actúa como un experto en compras online para un argentino. El usuario busca comprar: '{search_query}'. El Dólar informal (Blue) está a ${dolar_blue_venta} ARS. Dame estimaciones realistas actuales. Muestra 2 opciones: Mercado Libre Argentina, y otra importando por Amazon/Tiendamia (sumando 60% de impuestos aduaneros). Muestra los precios en Pesos Argentinos (ARS) y Dólares (USD). Sé conciso y formatea la respuesta de forma muy limpia."
+                    prompt = f"""
+                    Actúa como un experto en compras online para un argentino. El usuario busca comprar: '{search_query}'. 
+                    El Dólar informal (Blue) está a ${dolar_blue_venta} ARS. 
+                    Calcula estimaciones realistas actuales. Evalúa comprarlo localmente (ej. Mercado Libre) vs importarlo (ej. Amazon/Tiendamia sumando 60% de impuestos de aduana).
+                    
+                    Devuelve ESTRICTAMENTE un JSON con esta estructura exacta (sin comillas invertidas extra):
+                    {{
+                        "analisis": "Texto breve comparando las opciones y recomendando la mejor.",
+                        "opciones": [
+                            {{
+                                "item": "Nombre del producto y origen (Ej: PlayStation 5 - Importada Amazon)",
+                                "precio_ars": numero_entero_sin_simbolos,
+                                "precio_usd": numero_decimal_sin_simbolos,
+                                "notas": "Detalles breves (Ej: Incluye 60% imp. aduana)"
+                            }}
+                        ]
+                    }}
+                    """
                     res = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
-                    st.info("💡 Consejo: Revisa estas opciones y usa el botón de abajo para guardar tu favorita en la Wishlist.")
-                    st.markdown(res.text)
+                    text_res = res.text.replace("```json", "").replace("```", "").strip()
+                    st.session_state.wishlist_ia_results = json.loads(text_res)
                 except Exception as e:
-                    st.error(f"Error en la búsqueda: {e}")
-    
-    st.divider()
-    
+                    st.error(f"Error en la búsqueda o formato de IA: {e}")
+
+    # Mostrar Resultados de IA si existen en memoria
+    if "wishlist_ia_results" in st.session_state and st.session_state.wishlist_ia_results:
+        data = st.session_state.wishlist_ia_results
+        st.info(f"🤖 **Análisis de tu IA:** {data.get('analisis', '')}")
+        
+        st.markdown("#### 🛒 Opciones listas para guardar:")
+        for idx, opc in enumerate(data.get("opciones", [])):
+            with st.container():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**{opc.get('item', 'Producto')}**")
+                    p_ars = float(opc.get('precio_ars', 0))
+                    p_usd = float(opc.get('precio_usd', 0))
+                    st.markdown(f"<span style='color:#10B981; font-weight:bold;'>{simbolo_moneda}{p_ars:,.0f}</span> (US$ {p_usd:,.2f})".replace(",", "."), unsafe_allow_html=True)
+                    st.caption(f"📝 {opc.get('notas', '')}")
+                with col2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("➕ Agregar", key=f"add_wl_ia_{idx}", use_container_width=True):
+                        st.session_state.wishlist.append({
+                            "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"),
+                            "item": opc.get("item", "Producto"),
+                            "precio_ars": p_ars,
+                            "precio_usd": p_usd,
+                            "notas": opc.get("notas", "")
+                        })
+                        save_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"], st.session_state.wishlist)
+                        st.session_state.wishlist_ia_results = None # Limpia la búsqueda
+                        st.success("¡Agregado a tu lista de deseos!")
+                        st.rerun()
+            st.divider()
+
     with st.expander("➕ Añadir a la Wishlist manualmente"):
         with st.form("manual_wl"):
             c1, c2 = st.columns(2)
@@ -584,13 +630,11 @@ with tab_wishlist:
                 else:
                     st.error("Debes ponerle un nombre al producto.")
     
-    st.divider()
-    
     st.subheader("📌 Mis Deseos Guardados")
     if st.session_state.wishlist:
         for w in st.session_state.wishlist:
             st.markdown(f"**{w['item']}**")
-            st.markdown(f"<span style='color:#10B981; font-weight:bold;'>{simbolo_moneda}{w['precio_ars']:,.0f}</span> (US$ {w['precio_usd']:,.2f})".replace(",", "."), unsafe_allow_html=True)
+            st.markdown(f"<span style='color:#10B981; font-weight:bold;'>{simbolo_moneda}{float(w.get('precio_ars', 0)):,.0f}</span> (US$ {float(w.get('precio_usd', 0)):,.2f})".replace(",", "."), unsafe_allow_html=True)
             if w.get('notas'):
                 st.caption(f"📝 {w['notas']}")
             if st.button("🗑️ Eliminar", key=f"del_w_{w['id']}"):
