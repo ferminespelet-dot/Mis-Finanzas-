@@ -32,6 +32,11 @@ st.markdown("""
         border-radius: 10px;
         border: 1px solid rgba(217, 119, 6, 0.1);
     }
+    .stChatMessage {
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -266,9 +271,10 @@ st.caption(f"Faltan **{max(0, dias_faltantes)} días** para el final de tu ciclo
 if now.day == DIA_CIERRE:
     st.warning(f"💰 **¡Es día de cierre!** Revisa tus saldos y mueve tu sobrante a los bolsillos en la pestaña 'Ciclos'.")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro", "⚙️ Ajustes"
-])
+# ORDEN DE PESTAÑAS (Cerebro a la izquierda, abre en Registro por defecto)
+tab_cerebro, tab_registro, tab_balance, tab_historial, tab_ciclos, tab_categorias, tab_ajustes = st.tabs([
+    "🧠 Cerebro", "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "⚙️ Ajustes"
+], default="💬 Registro")
 
 def formatear_tarjeta_movimiento(tx):
     color = "#10B981" if tx["tipo"] == "ingreso" else "#EF4444"
@@ -291,10 +297,125 @@ def formatear_tarjeta_movimiento(tx):
     """, unsafe_allow_html=True)
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO (ARRIBA DE TODO)
+# PESTAÑA 1: SEGUNDO CEREBRO (A la izquierda)
 # ==============================================================
-with tab1:
-    # 1. EL REGISTRO VA PRIMERO (Más accesible al dedo)
+with tab_cerebro:
+    st.markdown("<h2 style='text-align:center;'>🧠 Segundo Cerebro</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>Tus ideas libres. Escribe una nota o escribe <b>'Ey, Cerebro'</b> para invocar a la IA.</p>", unsafe_allow_html=True)
+    
+    raw_thought = st.text_area("Ideas", placeholder="Ej: Pensé en una receta... o 'Ey Cerebro, hazme una lista de compras'", label_visibility="collapsed")
+    if st.button("✨ Iniciar Bloc de Notas", type="primary", use_container_width=True):
+        if not api_key:
+            st.error("Falta tu API Key de Gemini en los Secretos.")
+        elif not raw_thought.strip():
+            st.warning("Escribe algo para poder armar el bloc.")
+        else:
+            with st.spinner("Procesando con IA..."):
+                try:
+                    client = genai.Client(api_key=api_key)
+                    if "ey, cerebro" in raw_thought.lower() or "ey cerebro" in raw_thought.lower():
+                        prompt_ia = f"Eres 'Cerebro', la IA personal de {usuario}. Responde a la siguiente consulta del usuario de forma útil, concisa y amigable: {raw_thought}"
+                        res_ia = client.models.generate_content(model='gemini-3.6-flash', contents=prompt_ia)
+                        respuesta_texto = res_ia.text.strip()
+                        
+                        prompt_titulo = f"Crea un título corto con un emoji al inicio para esta consulta: '{raw_thought}'. Devuelve solo el texto con el emoji."
+                        res_titulo = client.models.generate_content(model='gemini-3.6-flash', contents=prompt_titulo)
+                        titulo_con_emoji = res_titulo.text.strip().replace('"', '')
+                        
+                        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        thread_obj = {
+                            "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"),
+                            "titulo": titulo_con_emoji,
+                            "categoria": "IA Consulta",
+                            "creado": ts,
+                            "mensajes": [
+                                {"autor": "usuario", "texto": raw_thought},
+                                {"autor": "assistant", "texto": respuesta_texto}
+                            ]
+                        }
+                        st.session_state.thoughts.append(thread_obj)
+                    else:
+                        prompt = (
+                            "Analiza el texto. Sepáralo en ideas independientes. "
+                            "Determina para cada una: 'titulo' (DEBE OBLIGATORIAMENTE EMPEZAR CON UN EMOJI representativo), "
+                            "'categoria' y 'contenido'. "
+                            "Devuelve ÚNICAMENTE un JSON válido (lista de objetos). "
+                            f"Texto: '{raw_thought}'"
+                        )
+                        resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
+                        tr = resp.text.strip().replace("```json", "").replace("```", "").strip()
+                        new_thoughts = json.loads(tr)
+                        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        
+                        for item in new_thoughts:
+                            thread_obj = {
+                                "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"),
+                                "titulo": item.get("titulo", "📝 Nueva Idea"),
+                                "categoria": item.get("categoria", "General"),
+                                "creado": ts,
+                                "mensajes": [{"autor": "usuario", "texto": item.get("contenido", "")}]
+                            }
+                            st.session_state.thoughts.append(thread_obj)
+                    
+                    save_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], st.session_state.thoughts, json_cols=["mensajes"])
+                    st.success("¡Blocs creados!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error procesando idea: {e}")
+
+    st.divider()
+    
+    if st.session_state.thoughts:
+        hilos_ordenados = sorted(st.session_state.thoughts, key=lambda x: x["id"], reverse=True)
+        for t in hilos_ordenados:
+            with st.expander(f"{t['titulo']}  (Creado: {t['creado'][:10]})"):
+                with st.popover("📄 Ver texto completo (Para copiar)"):
+                    texto_completo = "\n\n".join([f"{'Tú' if msg['autor']=='usuario' else 'Cerebro'}: {msg['texto']}" for msg in t["mensajes"]])
+                    st.code(texto_completo, language="markdown")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                for msg in t["mensajes"]:
+                    if msg["autor"] == "usuario":
+                        with st.chat_message("user", avatar="👤"):
+                            st.write(msg["texto"])
+                    else:
+                        with st.chat_message("assistant", avatar="🧠"):
+                            st.write(msg["texto"])
+                
+                with st.form(f"chat_form_{t['id']}", clear_on_submit=True):
+                    reply = st.text_input("Nueva nota...", placeholder="Anota algo o escribe 'Ey, Cerebro, dame ideas...'", key=f"input_{t['id']}")
+                    submit_nota = st.form_submit_button("Guardar en el Bloc", use_container_width=True)
+                    
+                    if submit_nota and reply:
+                        t["mensajes"].append({"autor": "usuario", "texto": reply})
+                        
+                        if "ey, cerebro" in reply.lower() or "ey cerebro" in reply.lower():
+                            with st.spinner("Cerebro está procesando tu nota..."):
+                                try:
+                                    client = genai.Client(api_key=api_key)
+                                    historial_texto = "\n".join([f"{'Usuario' if m['autor']=='usuario' else 'Cerebro'}: {m['texto']}" for m in t["mensajes"]])
+                                    prompt_ia = f"Eres 'Cerebro', la IA personal de {usuario}. El usuario te acaba de invocar.\n\nEste es el historial del bloc de notas:\n{historial_texto}\n\nResponde a la última petición del usuario de forma útil, concisa y amigable."
+                                    res_ia = client.models.generate_content(model='gemini-3.6-flash', contents=prompt_ia)
+                                    
+                                    t["mensajes"].append({"autor": "assistant", "texto": res_ia.text.strip()})
+                                except Exception as e:
+                                    t["mensajes"].append({"autor": "assistant", "texto": f"Mmm, tuve un problema procesando eso. Detalles: {e}"})
+                        
+                        save_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], st.session_state.thoughts, json_cols=["mensajes"])
+                        st.rerun()
+                
+                if st.button("🗑️ Eliminar este bloc", key=f"del_{t['id']}"):
+                    st.session_state.thoughts = [orig_t for orig_t in st.session_state.thoughts if orig_t["id"] != t["id"]]
+                    save_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], st.session_state.thoughts, json_cols=["mensajes"])
+                    st.rerun()
+    else:
+        st.info("Aún no tienes notas guardadas.")
+
+# ==============================================================
+# PESTAÑA 2: REGISTRO (Abre por defecto)
+# ==============================================================
+with tab_registro:
     st.markdown("### 🎙️ Nuevo Registro")
     user_input = st.text_area("Registro", placeholder="Ej: Supermercado 20000, se pagó mitad y mitad...", height=100, label_visibility="collapsed")
     
@@ -345,7 +466,6 @@ with tab1:
 
     st.divider()
 
-    # 2. ÚLTIMA ACTIVIDAD (Abajo del registro)
     st.subheader("⏱️ Última Actividad")
     if st.session_state.transactions:
         tx_ordenadas = sorted(st.session_state.transactions, key=lambda x: x['timestamp'], reverse=True)
@@ -360,7 +480,6 @@ with tab1:
     
     st.divider()
     
-    # 3. PENDIENTES Y DEVOLUCIONES
     col_izq, col_der = st.columns(2)
     with col_izq:
         st.subheader("📌 Pendientes")
@@ -411,14 +530,13 @@ with tab1:
     col3.metric("Gastos Ciclo", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
 
 # ==============================================================
-# PESTAÑA 2: BALANCE (GRÁFICO MEJORADO)
+# PESTAÑA 3: BALANCE
 # ==============================================================
-with tab2:
+with tab_balance:
     st.subheader("📊 Gastos por Categoría")
     if not df_cycle.empty and not df_cycle[df_cycle["tipo"] == "gasto"].empty:
         df_g = df_cycle[df_cycle["tipo"] == "gasto"].groupby("categoria")["monto"].sum().reset_index().sort_values(by="monto", ascending=False)
         
-        # Diseño Premium para la torta
         fig = px.pie(df_g, values="monto", names="categoria", hole=0.45, color_discrete_sequence=px.colors.qualitative.Pastel)
         
         fig.update_traces(
@@ -443,9 +561,9 @@ with tab2:
         st.info("No hay gastos registrados en este ciclo mensual.")
 
 # ==============================================================
-# PESTAÑA 3: HISTORIAL (EMBELLECIDO)
+# PESTAÑA 4: HISTORIAL
 # ==============================================================
-with tab3:
+with tab_historial:
     st.subheader("📜 Todos los Movimientos")
     if not df_cycle.empty:
         q = st.text_input("🔍 Buscar por palabra clave")
@@ -456,7 +574,6 @@ with tab3:
             filtro_cat = df_show["categoria"].str.contains(q, case=False, na=False)
             df_show = df_show[filtro_desc | filtro_cat]
             
-        # Preparar datos bonitos para la tabla
         df_display = df_show.copy()
         df_display["Fecha"] = pd.to_datetime(df_display["timestamp"]).dt.strftime("%d/%m/%Y %H:%M")
         df_display["Categoría"] = df_display["categoria"].str.capitalize()
@@ -469,7 +586,6 @@ with tab3:
         df_display["Monto"] = df_display.apply(format_monto, axis=1)
         df_display = df_display[["Fecha", "Categoría", "Descripción", "Monto"]]
         
-        # Aplicar colores con Pandas Styler
         def color_monto_col(val):
             if isinstance(val, str):
                 if val.startswith('+'): return 'color: #10B981; font-weight: bold;'
@@ -487,9 +603,9 @@ with tab3:
         st.info("Sin movimientos.")
 
 # ==============================================================
-# PESTAÑA 4: CICLOS Y BOLSILLOS
+# PESTAÑA 5: CICLOS Y BOLSILLOS
 # ==============================================================
-with tab4:
+with tab_ciclos:
     st.subheader(f"📅 Cierre de Mes (Día {DIA_CIERRE})")
     leftover = st.number_input("Saldo sobrante a guardar:", min_value=0.0, value=float(max(0, saldo_actual)), step=1000.0)
     
@@ -538,9 +654,9 @@ with tab4:
         st.divider()
 
 # ==============================================================
-# PESTAÑA 5: CATEGORÍAS
+# PESTAÑA 6: CATEGORÍAS
 # ==============================================================
-with tab5:
+with tab_categorias:
     st.subheader("🏷️ Gestionar Categorías")
     with st.form("nc"):
         n_name = st.text_input("Nombre de la nueva categoría")
@@ -556,79 +672,9 @@ with tab5:
         st.markdown(f"- **{cat}**: {', '.join(keys)}")
 
 # ==============================================================
-# PESTAÑA 6: SEGUNDO CEREBRO
-# ==============================================================
-with tab6:
-    st.subheader("🧠 Segundo Cerebro")
-    st.markdown("Caja para tus ideas libres, pendientes o wishlist.")
-    
-    raw_thought = st.text_area("Notas", placeholder="Ej: Pensé en un riff... o me gustaría comprar X...", label_visibility="collapsed")
-    if st.button("✨ Organizar Idea con IA", type="primary", use_container_width=True):
-        if not api_key:
-            st.error("Falta tu API Key de Gemini en los Secretos.")
-        elif not raw_thought.strip():
-            st.warning("Escribe algo para poder organizarlo.")
-        else:
-            with st.spinner("Procesando tus pensamientos..."):
-                try:
-                    client = genai.Client(api_key=api_key)
-                    prompt = (
-                        "Analiza el texto. Sepáralo en ideas independientes. "
-                        "Determina para cada una: 'titulo', 'categoria' y 'contenido'. "
-                        "Devuelve ÚNICAMENTE un JSON válido (lista de objetos). "
-                        f"Texto: '{raw_thought}'"
-                    )
-                    resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
-                    tr = resp.text.strip().replace("```json", "").replace("```", "").strip()
-                    new_thoughts = json.loads(tr)
-                    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    
-                    for item in new_thoughts:
-                        thread_obj = {
-                            "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"),
-                            "titulo": item.get("titulo", "Idea sin título"),
-                            "categoria": item.get("categoria", "Random"),
-                            "creado": ts,
-                            "mensajes": [{"autor": "usuario", "texto": item.get("contenido", "")}]
-                        }
-                        st.session_state.thoughts.append(thread_obj)
-                    
-                    save_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], st.session_state.thoughts, json_cols=["mensajes"])
-                    st.success("¡Hilos creados y guardados!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error procesando idea: {e}")
-
-    st.divider()
-    
-    if st.session_state.thoughts:
-        hilos_ordenados = sorted(st.session_state.thoughts, key=lambda x: x["id"], reverse=True)
-        for t in hilos_ordenados:
-            with st.expander(f"📌 [{t['categoria']}] {t['titulo']} ({t['creado']})"):
-                for msg in t["mensajes"]:
-                    with st.chat_message("user" if msg["autor"]=="usuario" else "assistant"):
-                        st.write(msg["texto"])
-                
-                with st.form(f"chat_form_{t['id']}", clear_on_submit=True):
-                    reply = st.text_input("Agregar nota a este hilo...", key=f"input_{t['id']}")
-                    if st.form_submit_button("Enviar") and reply:
-                        for orig_t in st.session_state.thoughts:
-                            if orig_t["id"] == t["id"]:
-                                orig_t["mensajes"].append({"autor": "usuario", "texto": reply})
-                        save_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], st.session_state.thoughts, json_cols=["mensajes"])
-                        st.rerun()
-                
-                if st.button("🗑️ Eliminar hilo completo", key=f"del_{t['id']}"):
-                    st.session_state.thoughts = [orig_t for orig_t in st.session_state.thoughts if orig_t["id"] != t["id"]]
-                    save_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], st.session_state.thoughts, json_cols=["mensajes"])
-                    st.rerun()
-    else:
-        st.info("Aún no tienes notas guardadas.")
-
-# ==============================================================
 # PESTAÑA 7: AJUSTES Y REPORTES
 # ==============================================================
-with tab7:
+with tab_ajustes:
     st.subheader("⚙️ Configuración Personal")
     
     with st.form("settings_form"):
