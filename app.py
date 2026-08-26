@@ -265,7 +265,6 @@ with tab1:
                     }}
                     """
                     
-                    # MODELO ACTUALIZADO
                     response = client.models.generate_content(
                         model='gemini-3.6-flash', 
                         contents=prompt
@@ -359,7 +358,7 @@ with tab2:
         if not df_g.empty:
             fig = px.pie(
                 df_g, values="monto", names="categoria", hole=0.4, 
-                color_discrete_sequence=px.colors.qualitative.Set1  # ¡PALETA DE COLORES CONTRASTANTES ACÁ!
+                color_discrete_sequence=px.colors.qualitative.Set1
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -368,7 +367,7 @@ with tab2:
         st.info("No hay registros en este ciclo.")
 
 # ==============================================================
-# PESTAÑA 3: HISTORIAL (CON EXPORTACIÓN A EXCEL)
+# PESTAÑA 3: HISTORIAL 
 # ==============================================================
 with tab3:
     st.subheader("📜 Todos los Movimientos")
@@ -383,7 +382,6 @@ with tab3:
             
         st.dataframe(df_show, use_container_width=True)
         
-        # EL BOTÓN MÁGICO DE EXPORTACIÓN (CSV para abrir en Excel)
         csv = df_show.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Descargar Historial en Excel (CSV)",
@@ -457,7 +455,7 @@ with tab5:
         st.markdown(f"- **{cat}**: {', '.join(keys)}")
 
 # ==============================================================
-# PESTAÑA 6: SEGUNDO CEREBRO (NOTAS)
+# PESTAÑA 6: SEGUNDO CEREBRO (LISTA DESCENDENTE REDISEÑADA)
 # ==============================================================
 with tab6:
     st.subheader("🧠 Segundo Cerebro")
@@ -480,7 +478,6 @@ with tab6:
                         "Devuelve ÚNICAMENTE un JSON válido (lista de objetos). "
                         f"Texto: '{raw_thought}'"
                     )
-                    # MODELO ACTUALIZADO
                     resp = client.models.generate_content(
                         model='gemini-3.6-flash', 
                         contents=prompt
@@ -512,34 +509,35 @@ with tab6:
                     st.error(f"Error procesando idea: {e}")
 
     st.divider()
+    
+    # NUEVO SISTEMA VISUAL: LISTA ORDENADA DE MÁS RECIENTE A MÁS ANTIGUO
     if st.session_state.thoughts:
-        opciones_hilos = list({t["id"]: f"[{t['categoria']}] {t['titulo']}" for t in st.session_state.thoughts}.keys())
+        # Ordenamos los hilos usando el ID (que funciona como fecha/hora exacta) de mayor a menor
+        hilos_ordenados = sorted(st.session_state.thoughts, key=lambda x: x["id"], reverse=True)
         
-        def format_hilo(x):
-            for t in st.session_state.thoughts:
-                if t["id"] == x:
-                    return f"[{t['categoria']}] {t['titulo']}"
-            return x
-            
-        selected_id = st.selectbox("Tus hilos guardados:", options=opciones_hilos, format_func=format_hilo)
-        current_thread = next((t for t in st.session_state.thoughts if t["id"] == selected_id), None)
-        
-        if current_thread:
-            st.markdown(f"### 💬 {current_thread['titulo']}")
-            for msg in current_thread["mensajes"]:
-                with st.chat_message("user" if msg["autor"]=="usuario" else "assistant"):
-                    st.write(msg["texto"])
-            
-            with st.form(f"chat_form_{selected_id}", clear_on_submit=True):
-                reply = st.text_input("Continuar escribiendo en este hilo...")
-                if st.form_submit_button("Agregar Nota") and reply:
-                    current_thread["mensajes"].append({"autor": "usuario", "texto": reply})
+        for t in hilos_ordenados:
+            with st.expander(f"📌 [{t['categoria']}] {t['titulo']} ({t['creado']})"):
+                
+                # Mostrar los mensajes del hilo
+                for msg in t["mensajes"]:
+                    with st.chat_message("user" if msg["autor"]=="usuario" else "assistant"):
+                        st.write(msg["texto"])
+                
+                # Formulario para agregar más notas a este hilo
+                with st.form(f"chat_form_{t['id']}", clear_on_submit=True):
+                    reply = st.text_input("Agregar nota a este hilo...", key=f"input_{t['id']}")
+                    if st.form_submit_button("Enviar"):
+                        if reply:
+                            for orig_t in st.session_state.thoughts:
+                                if orig_t["id"] == t["id"]:
+                                    orig_t["mensajes"].append({"autor": "usuario", "texto": reply})
+                            save_json(THOUGHTS_FILE, st.session_state.thoughts)
+                            st.rerun()
+                
+                # Botón para borrar el hilo completo
+                if st.button("🗑️ Eliminar hilo completo", key=f"del_{t['id']}"):
+                    st.session_state.thoughts = [orig_t for orig_t in st.session_state.thoughts if orig_t["id"] != t["id"]]
                     save_json(THOUGHTS_FILE, st.session_state.thoughts)
                     st.rerun()
-            
-            if st.button("🗑️ Eliminar este hilo por completo"):
-                st.session_state.thoughts = [t for t in st.session_state.thoughts if t["id"] != selected_id]
-                save_json(THOUGHTS_FILE, st.session_state.thoughts)
-                st.rerun()
     else:
         st.info("Aún no tienes notas guardadas en tu Segundo Cerebro.")
