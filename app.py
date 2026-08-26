@@ -285,7 +285,7 @@ total_ahorrado_en_bolsillos = sum(float(b.get("monto", 0)) for b in st.session_s
 # Plata libre histórica (Lo que ganaste en tu vida - lo que gastaste - lo que tenés encerrado en bolsillos)
 saldo_libre_historico = (i_all - g_all) - total_ahorrado_en_bolsillos
 
-# Saldo ESTRICTO de este mes (Empieza en 0. Sube si cobras, baja si gastas, sube si traes plata de meses pasados (rollover), baja si ahorras).
+# Saldo ESTRICTO de este mes
 saldo_ciclo_actual = i_c - g_c + r_c - a_c + d_c
 
 # El sobrante del pasado es la plata libre total menos la que estás usando este mes.
@@ -348,7 +348,6 @@ if not st.session_state.get("mostrar_reporte", False):
     # PESTAÑA 1: REGISTRO
     # ==============================================================
     with tab_registro:
-        # SUPER SALDO DEL MES ACTUAL
         st.markdown(f"""
         <div style='background-color: rgba(16, 185, 129, 0.1); border: 2px solid rgba(16, 185, 129, 0.3); padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 25px;'>
             <p style='margin: 0; font-size: 16px; color: gray; font-weight: 600;'>SALDO DEL MES</p>
@@ -385,8 +384,8 @@ if not st.session_state.get("mostrar_reporte", False):
                         ]
                     }}
                     """
-                    # ACÁ ESTÁ EL CAMBIO DE MODELO A PRUEBA DE FALLOS
-                    response = client.models.generate_content(model='gemini-1.5-flash-latest', contents=prompt)
+                    # MODELO UNIVERSAL A PRUEBA DE FALLOS 404
+                    response = client.models.generate_content(model='gemini-pro', contents=prompt)
                     text_res = response.text.replace("```json", "").replace("```", "").strip()
                     data = json.loads(text_res)
                     
@@ -396,7 +395,6 @@ if not st.session_state.get("mostrar_reporte", False):
                         final_monto = tx["monto"] / 2 if is_split else tx["monto"]
                         
                         if tx["tipo"] == "ahorro":
-                            # Lógica para inyectar ahorro directo a los bolsillos
                             pocket_name = tx.get("categoria", "Ahorro General")
                             target_b = next((b for b in st.session_state.bolsillos if b["nombre"].lower() == pocket_name.lower()), None)
                             if not target_b:
@@ -410,7 +408,6 @@ if not st.session_state.get("mostrar_reporte", False):
                             st.success(f"¡{simbolo_moneda}{final_monto} guardados en tu bolsillo '{target_b['nombre']}'!")
                         
                         else:
-                            # Gasto o Ingreso normal
                             tx_propia = {"timestamp": ts, "tipo": tx["tipo"], "monto": final_monto, "descripcion": tx["descripcion"] + (" (Mitad)" if is_split else ""), "categoria": tx.get("categoria", "Otros")}
                             st.session_state.transactions.append(tx_propia)
                             if is_split:
@@ -501,11 +498,13 @@ if not st.session_state.get("mostrar_reporte", False):
                         client = genai.Client(api_key=api_key)
                         if "ey, cerebro" in raw_thought.lower() or "ey cerebro" in raw_thought.lower():
                             prompt_ia = f"Eres 'Cerebro', la IA personal de {usuario}. Responde a la siguiente consulta del usuario de forma útil, concisa y amigable: {raw_thought}"
-                            res_ia = client.models.generate_content(model='gemini-1.5-flash-latest', contents=prompt_ia)
+                            # MODELO UNIVERSAL
+                            res_ia = client.models.generate_content(model='gemini-pro', contents=prompt_ia)
                             respuesta_texto = res_ia.text.strip()
                             
                             prompt_titulo = f"Crea un título corto con un emoji al inicio para esta consulta: '{raw_thought}'. Devuelve solo el texto con el emoji."
-                            res_titulo = client.models.generate_content(model='gemini-1.5-flash-latest', contents=prompt_titulo)
+                            # MODELO UNIVERSAL
+                            res_titulo = client.models.generate_content(model='gemini-pro', contents=prompt_titulo)
                             titulo_con_emoji = res_titulo.text.strip().replace('"', '')
                             
                             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -524,7 +523,8 @@ if not st.session_state.get("mostrar_reporte", False):
                                 "'categoria' y 'contenido'. Devuelve ÚNICAMENTE un JSON válido (lista de objetos). "
                                 f"Texto: '{raw_thought}'"
                             )
-                            resp = client.models.generate_content(model='gemini-1.5-flash-latest', contents=prompt)
+                            # MODELO UNIVERSAL
+                            resp = client.models.generate_content(model='gemini-pro', contents=prompt)
                             tr = resp.text.strip().replace("```json", "").replace("```", "").strip()
                             new_thoughts = json.loads(tr)
                             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -575,7 +575,8 @@ if not st.session_state.get("mostrar_reporte", False):
                                         client = genai.Client(api_key=api_key)
                                         historial_texto = "\n".join([f"{'Usuario' if m['autor']=='usuario' else 'Cerebro'}: {m['texto']}" for m in t["mensajes"]])
                                         prompt_ia = f"Eres 'Cerebro', la IA personal de {usuario}. El usuario te acaba de invocar.\n\nHistorial:\n{historial_texto}\n\nResponde útil, conciso y amigable."
-                                        res_ia = client.models.generate_content(model='gemini-1.5-flash-latest', contents=prompt_ia)
+                                        # MODELO UNIVERSAL
+                                        res_ia = client.models.generate_content(model='gemini-pro', contents=prompt_ia)
                                         t["mensajes"].append({"autor": "assistant", "texto": res_ia.text.strip()})
                                     except Exception as e:
                                         t["mensajes"].append({"autor": "assistant", "texto": f"Error: {e}"})
@@ -631,7 +632,8 @@ if not st.session_state.get("mostrar_reporte", False):
                             ]
                         }}
                         """
-                        res = client.models.generate_content(model='gemini-1.5-flash-latest', contents=prompt)
+                        # MODELO UNIVERSAL
+                        res = client.models.generate_content(model='gemini-pro', contents=prompt)
                         text_res = res.text.replace("```json", "").replace("```", "").strip()
                         st.session_state.wishlist_ia_results = json.loads(text_res)
                     except Exception as e:
