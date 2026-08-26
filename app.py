@@ -236,7 +236,7 @@ if "transactions" not in st.session_state:
 api_key = os.environ.get("GEMINI_API_KEY", "")
 
 # ==============================================================
-# CÁLCULO DE CICLOS Y SALDOS
+# MATEMÁTICA Y CÁLCULO DE SALDOS (NÚCLEO MEJORADO)
 # ==============================================================
 now = datetime.datetime.now()
 if now.day >= DIA_CIERRE:
@@ -250,16 +250,30 @@ df_tx = pd.DataFrame(st.session_state.transactions)
 if not df_tx.empty:
     df_tx["timestamp_dt"] = pd.to_datetime(df_tx["timestamp"])
     df_cycle = df_tx[(df_tx["timestamp_dt"] >= current_cycle_start) & (df_tx["timestamp_dt"] < next_cycle_start)]
+    tot_ing_all = df_tx[df_tx["tipo"] == "ingreso"]["monto"].sum()
+    tot_gas_all = df_tx[df_tx["tipo"] == "gasto"]["monto"].sum()
 else:
     df_cycle = pd.DataFrame(columns=["tipo", "monto", "descripcion", "categoria", "timestamp"])
+    tot_ing_all = 0
+    tot_gas_all = 0
 
 total_ingresos = df_cycle[df_cycle["tipo"] == "ingreso"]["monto"].sum() if not df_cycle.empty else 0
 total_gastos = df_cycle[df_cycle["tipo"] == "gasto"]["monto"].sum() if not df_cycle.empty else 0
-saldo_actual = total_ingresos - total_gastos
+
+# Fórmulas Maestras de Ahorro y Saldos
+saldo_bancario_bruto = tot_ing_all - tot_gas_all
+total_ahorrado = sum(float(b.get("monto", 0)) for b in st.session_state.bolsillos)
+
+# El Saldo Real DESCUENTA la plata que ya está guardada en los bolsillos
+saldo_real = saldo_bancario_bruto - total_ahorrado
+
+saldo_ciclo = total_ingresos - total_gastos
+# El sobrante pasado aísla el saldo de meses anteriores, protegiendo si estás en positivo este mes
+saldo_anterior_disponible = max(0, saldo_real - max(0, saldo_ciclo))
 
 tot_pendientes = sum([p["monto"] for p in st.session_state.pendings if p.get("estado") == "pendiente"])
 tot_devoluciones = sum([r["monto"] for r in st.session_state.returns if r.get("estado") == "pendiente"])
-saldo_neto = saldo_actual - tot_pendientes + tot_devoluciones
+saldo_neto = saldo_real - tot_pendientes + tot_devoluciones
 
 # ==============================================================
 # ENCABEZADO PRINCIPAL
@@ -300,7 +314,7 @@ def formatear_tarjeta_movimiento(tx):
     """, unsafe_allow_html=True)
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO (ABRE POR DEFECTO)
+# PESTAÑA 1: REGISTRO
 # ==============================================================
 with tab_registro:
     st.markdown("### 🎙️ Nuevo Registro")
@@ -412,9 +426,9 @@ with tab_registro:
     
     st.divider()
     col1, col2, col3 = st.columns(3)
-    col1.metric("Saldo Real", f"{simbolo_moneda}{saldo_actual:,.0f}".replace(",", "."))
-    col2.metric("Saldo Neto", f"{simbolo_moneda}{saldo_neto:,.0f}".replace(",", "."))
-    col3.metric("Gastos Ciclo", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
+    col1.metric("Saldo Total Diario", f"{simbolo_moneda}{saldo_real:,.0f}".replace(",", "."))
+    col2.metric("Saldo Neto (Proyectado)", f"{simbolo_moneda}{saldo_neto:,.0f}".replace(",", "."))
+    col3.metric("Gastos Ciclo Actual", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
 
 # ==============================================================
 # PESTAÑA 2: SEGUNDO CEREBRO
@@ -537,7 +551,7 @@ with tab_cerebro:
         st.info("Aún no tienes notas guardadas.")
 
 # ==============================================================
-# PESTAÑA 3: WISHLIST (IA ESTRUCTURADA EN TARJETAS)
+# PESTAÑA 3: WISHLIST 
 # ==============================================================
 with tab_wishlist:
     st.markdown("<h2 style='text-align:center;'>🎁 Lista de Deseos</h2>", unsafe_allow_html=True)
@@ -584,34 +598,30 @@ with tab_wishlist:
                 except Exception as e:
                     st.error(f"Error procesando los datos de la IA: {e}")
 
-    # Mostrar Resultados de IA en forma de TARJETAS LIMPIAS
     if "wishlist_ia_results" in st.session_state and st.session_state.wishlist_ia_results:
         data = st.session_state.wishlist_ia_results
         st.info(f"🤖 **Análisis de tu IA:** {data.get('analisis', '')}")
         
         st.markdown("#### 🛒 Opciones listas para guardar:")
         for idx, opc in enumerate(data.get("opciones", [])):
-            with st.container(border=True): # Crea el borde prolijo
+            with st.container(border=True): 
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.markdown(f"### 🛍️ {opc.get('origen', 'Opción')}")
                     st.markdown(f"**{opc.get('item', 'Producto')}**")
                     
-                    # Extracción segura de números
                     b_usd = float(opc.get('precio_base_usd', 0))
                     e_usd = float(opc.get('envio_usd', 0))
                     i_usd = float(opc.get('impuestos_usd', 0))
                     t_usd = float(opc.get('total_usd', 0))
                     t_ars = float(opc.get('total_ars', 0))
                     
-                    # Desglose en viñetas
                     st.markdown(f"""
                     * 📦 **Precio Base:** US$ {b_usd:,.2f}
                     * ✈️ **Envío:** US$ {e_usd:,.2f}
                     * 🏛️ **Imp./Aduana:** US$ {i_usd:,.2f}
                     """)
                     
-                    # Total formateado correctamente
                     str_ars = f"{t_ars:,.0f}".replace(",", ".")
                     st.markdown(f"#### 💰 Total Final: <span style='color:#10B981;'>{simbolo_html}{str_ars}</span> <span style='font-size:16px; color:#A0A0A0;'>(US&#36; {t_usd:,.2f})</span>", unsafe_allow_html=True)
                     st.caption(f"⏱️ **Entrega estimada:** {opc.get('tiempo_entrega', '')} | 📝 **Notas:** {opc.get('notas', '')}")
@@ -627,7 +637,7 @@ with tab_wishlist:
                             "notas": opc.get("notas", "")
                         })
                         save_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"], st.session_state.wishlist)
-                        st.session_state.wishlist_ia_results = None # Cierra la búsqueda al guardar
+                        st.session_state.wishlist_ia_results = None 
                         st.success("¡Agregado a tu lista de deseos!")
                         st.rerun()
 
@@ -657,7 +667,7 @@ with tab_wishlist:
     st.subheader("📌 Mis Deseos Guardados")
     if st.session_state.wishlist:
         for w in st.session_state.wishlist:
-            with st.container(border=True): # Tarjetas para los guardados también
+            with st.container(border=True): 
                 cw1, cw2 = st.columns([3, 1])
                 with cw1:
                     st.markdown(f"**{w['item']}**")
@@ -750,13 +760,16 @@ with tab_historial:
         st.info("Sin movimientos.")
 
 # ==============================================================
-# PESTAÑA 6: CICLOS Y BOLSILLOS (CON BARRA DE PROGRESO WISHLIST)
+# PESTAÑA 6: CICLOS Y BOLSILLOS (ALCANCÍA INTELIGENTE)
 # ==============================================================
 with tab_ciclos:
     st.subheader(f"📅 Cierre de Mes (Día {DIA_CIERRE})")
     
+    st.markdown(f"**Disponible de meses anteriores:** <span style='color:#10B981; font-weight:bold;'>{simbolo_html}{saldo_anterior_disponible:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
+    st.caption("*(Tu sueldo del ciclo actual está protegido y no se puede guardar hasta el próximo cierre)*")
+
     # Armar opciones para destinar el sobrante usando los nombres actualizados
-    opc_sobrante = {}
+    opc_sobrante = {"saldo_principal": "⏪ Devolver al Saldo Principal"}
     for b in st.session_state.bolsillos:
         d_name = b["nombre"]
         if b.get("wishlist_id"):
@@ -764,20 +777,25 @@ with tab_ciclos:
             if wm: d_name = f"Meta: {wm['item']}"
         opc_sobrante[b["id"]] = d_name
 
-    leftover = st.number_input("Saldo sobrante a guardar:", min_value=0.0, value=float(max(0, saldo_actual)), step=1000.0)
-    destino_id = st.selectbox("¿A qué bolsillo va?", options=list(opc_sobrante.keys()), format_func=lambda x: opc_sobrante[x])
+    leftover = st.number_input("Monto a mover:", min_value=0.0, value=float(saldo_anterior_disponible), step=1000.0)
+    destino_id = st.selectbox("¿A dónde querés enviarlo?", options=list(opc_sobrante.keys()), format_func=lambda x: opc_sobrante[x])
     
-    if st.button("📥 Guardar en Bolsillo", use_container_width=True) and leftover > 0:
-        for b in st.session_state.bolsillos:
-            if b["id"] == destino_id:
-                b["monto"] += leftover
-        save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
-        st.success(f"¡Guardado en {opc_sobrante[destino_id]}!")
-        st.rerun()
+    # Solo mostramos el botón de guardar si no se seleccionó "devolver al saldo principal"
+    # Porque esa opción es solo para transferencias DESDE un bolsillo
+    if destino_id != "saldo_principal":
+        if st.button("📥 Guardar en Bolsillo", use_container_width=True) and leftover > 0:
+            if leftover > saldo_anterior_disponible:
+                st.warning("Estás intentando guardar más plata de la que tenés libre de meses anteriores.")
+            else:
+                for b in st.session_state.bolsillos:
+                    if b["id"] == destino_id:
+                        b["monto"] += leftover
+                save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
+                st.success(f"¡Guardado en {opc_sobrante[destino_id]}!")
+                st.rerun()
 
     st.divider()
     st.subheader("💰 Mis Bolsillos (Alcancía)")
-    total_ahorrado = sum(b["monto"] for b in st.session_state.bolsillos)
     st.metric("Total Ahorrado", f"{simbolo_moneda}{total_ahorrado:,.0f}".replace(",", "."))
     
     with st.expander("➕ Crear nuevo bolsillo"):
@@ -832,7 +850,6 @@ with tab_ciclos:
             with col_ed:
                 nueva_ubi = st.text_input(f"📍 Ubicación", value=b.get("ubicacion", ""), key=f"ubi_{b['id']}")
                 
-                # Desplegable para editar la meta a posteriori
                 wl_opts = [{"id": "", "label": "🚫 Sin meta"}] + [{"id": w["id"], "label": f"🎁 {w['item']}"} for w in st.session_state.wishlist]
                 idx_actual = [x["id"] for x in wl_opts].index(wl_id) if wl_id in [x["id"] for x in wl_opts] else 0
                 nuevo_wl = st.selectbox("🎯 Editar Meta", options=[x["id"] for x in wl_opts], format_func=lambda x: next(item["label"] for item in wl_opts if item["id"] == x), index=idx_actual, key=f"wl_{b['id']}")
@@ -851,16 +868,19 @@ with tab_ciclos:
                 dest = st.selectbox("Destino", [x for x in opc_sobrante.keys() if x != b["id"]], format_func=lambda x: opc_sobrante[x], key=f"dest_{b['id']}")
                 if st.button("Transferir", key=f"btn_mov_{b['id']}") and mover > 0:
                     b["monto"] -= mover
-                    for dest_b in st.session_state.bolsillos:
-                        if dest_b["id"] == dest: dest_b["monto"] += mover
+                    if dest == "saldo_principal":
+                        # Al descontarle monto al bolsillo, sube el Saldo Real automáticamente
+                        pass
+                    else:
+                        for dest_b in st.session_state.bolsillos:
+                            if dest_b["id"] == dest: dest_b["monto"] += mover
                     save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
                     st.rerun()
             
-            # NUEVO: Botón para eliminar bolsillo (si no es el predeterminado)
             if b["id"] != "b_default":
                 st.divider()
                 if st.button("🗑️ Eliminar este bolsillo", key=f"del_b_{b['id']}", use_container_width=True):
-                    # Transfiere todo el saldo al Ahorro General (b_default)
+                    # Pasa el saldo sobrante al Ahorro General
                     for def_b in st.session_state.bolsillos:
                         if def_b["id"] == "b_default":
                             def_b["monto"] += b["monto"]
@@ -868,7 +888,8 @@ with tab_ciclos:
                     st.session_state.bolsillos = [p for p in st.session_state.bolsillos if p["id"] != b["id"]]
                     save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
                     st.rerun()
-                st.caption("*(Si eliminas el bolsillo, la plata volverá al Ahorro General)*")
+                st.caption("*(Si eliminas el bolsillo, la plata volverá a tu 'Ahorro General')*")
+        st.markdown("<br>", unsafe_allow_html=True)
 
 # ==============================================================
 # PESTAÑA 7: CATEGORÍAS
