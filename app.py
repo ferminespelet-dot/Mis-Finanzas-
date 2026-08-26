@@ -123,7 +123,7 @@ def save_table(ws_title, headers, data_list, json_cols=[]):
         st.error(f"Error guardando tabla {ws_title}: {e}")
 
 # ==============================================================
-# FUNCIONES AUXILIARES
+# FUNCIONES AUXILIARES Y DE ESTADO
 # ==============================================================
 def get_dolar_blue():
     try:
@@ -154,43 +154,79 @@ passwords_guardadas = load_config("pins_security", {})
 if "usuario_autenticado" not in st.session_state:
     st.session_state.usuario_autenticado = None
 
+if "login_user_selected" not in st.session_state:
+    st.session_state.login_user_selected = None
+
 # ==============================================================
-# PANTALLA DE LOGIN
+# PANTALLA DE LOGIN RENOVADA
 # ==============================================================
 if st.session_state.usuario_autenticado is None:
-    st.markdown("<h1 style='text-align: center;'>Finanzas & Cerebro 🧠</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Selecciona tu perfil para ingresar</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; font-size: 3.5rem;'>¡Hola! 👋</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: gray;'>Finanzas & Cerebro</h3>", unsafe_allow_html=True)
     st.divider()
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        usuario_seleccionado = st.radio("Perfil:", ["Fermín", "Irina"], horizontal=True, label_visibility="collapsed")
-        st.markdown("<br>", unsafe_allow_html=True)
+    # 1. Pantalla de Selección de Íconos
+    if st.session_state.login_user_selected is None:
+        st.markdown("<h4 style='text-align: center;'>¿Quién está entrando?</h4><br>", unsafe_allow_html=True)
         
-        if usuario_seleccionado in passwords_guardadas:
-            st.markdown(f"#### 🔒 Ingresar como {usuario_seleccionado}")
-            pin_ingresado = st.text_input("Ingresa tu PIN numérico", type="password")
-            if st.button("Entrar", type="primary", use_container_width=True):
-                if pin_ingresado == passwords_guardadas[usuario_seleccionado]:
-                    iniciar_sesion(usuario_seleccionado)
-                else:
-                    st.error("PIN incorrecto. Inténtalo de nuevo.")
-        else:
-            st.markdown(f"#### 🆕 Crear perfil: {usuario_seleccionado}")
-            st.info("Crea un PIN numérico para proteger tus datos.")
-            nuevo_pin = st.text_input("Ingresa un nuevo PIN", type="password")
-            confirmar_pin = st.text_input("Confirma tu PIN", type="password")
-            if st.button("Crear perfil y Entrar", type="primary", use_container_width=True):
-                if nuevo_pin and nuevo_pin.isdigit():
-                    if nuevo_pin == confirmar_pin:
-                        passwords_guardadas[usuario_seleccionado] = nuevo_pin
-                        save_config("pins_security", passwords_guardadas)
-                        st.success("¡PIN creado con éxito!")
-                        iniciar_sesion(usuario_seleccionado)
-                    else:
-                        st.error("Los PINs no coinciden.")
-                else:
-                    st.error("El PIN debe contener únicamente números.")
+        # Hacemos 4 columnas para centrar los dos botones grandes en el medio
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        with c2:
+            if st.button("🍊 Fermín", use_container_width=True):
+                st.session_state.login_user_selected = "Fermín"
+                st.rerun()
+        with c3:
+            if st.button("🌸 Irina", use_container_width=True):
+                st.session_state.login_user_selected = "Irina"
+                st.rerun()
+                
+    # 2. Pantalla de PIN (después de elegir usuario)
+    else:
+        usuario_seleccionado = st.session_state.login_user_selected
+        icono_login = "🍊" if usuario_seleccionado == "Fermín" else "🌸"
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown(f"<h3 style='text-align: center;'>{icono_login} Perfil de {usuario_seleccionado}</h3>", unsafe_allow_html=True)
+            
+            if usuario_seleccionado in passwords_guardadas:
+                pin_ingresado = st.text_input("Ingresa tu PIN numérico", type="password")
+                
+                b1, b2 = st.columns(2)
+                with b1:
+                    if st.button("⬅️ Volver", use_container_width=True):
+                        st.session_state.login_user_selected = None
+                        st.rerun()
+                with b2:
+                    if st.button("Entrar", type="primary", use_container_width=True):
+                        if pin_ingresado == passwords_guardadas[usuario_seleccionado]:
+                            st.session_state.login_user_selected = None
+                            iniciar_sesion(usuario_seleccionado)
+                        else:
+                            st.error("PIN incorrecto. Inténtalo de nuevo.")
+            else:
+                st.info("Crea un PIN numérico para proteger tus datos.")
+                nuevo_pin = st.text_input("Ingresa un nuevo PIN", type="password")
+                confirmar_pin = st.text_input("Confirma tu PIN", type="password")
+                
+                b1, b2 = st.columns(2)
+                with b1:
+                    if st.button("⬅️ Volver", use_container_width=True):
+                        st.session_state.login_user_selected = None
+                        st.rerun()
+                with b2:
+                    if st.button("Crear y Entrar", type="primary", use_container_width=True):
+                        if nuevo_pin and nuevo_pin.isdigit():
+                            if nuevo_pin == confirmar_pin:
+                                passwords_guardadas[usuario_seleccionado] = nuevo_pin
+                                save_config("pins_security", passwords_guardadas)
+                                st.success("¡PIN creado con éxito!")
+                                st.session_state.login_user_selected = None
+                                iniciar_sesion(usuario_seleccionado)
+                            else:
+                                st.error("Los PINs no coinciden.")
+                        else:
+                            st.error("El PIN debe contener únicamente números.")
     
     st.stop()
 
@@ -253,7 +289,7 @@ if st.sidebar.button("🚪 Cerrar Sesión", type="primary"):
 
 dolar_blue_venta = get_dolar_blue()
 
-# CÁLCULO DE CICLOS PERSONALIZADOS (28 o 22)
+# CÁLCULO DE CICLOS PERSONALIZADOS
 now = datetime.datetime.now()
 if now.day >= DIA_CIERRE:
     current_cycle_start = datetime.datetime(now.year, now.month, DIA_CIERRE)
@@ -275,14 +311,14 @@ fecha_linda = f"{dias_semana[now.weekday()]} {now.day} de {meses_anio[now.month 
 
 icono = "🍊" if usuario_actual == "Fermín" else "🌸"
 
-# Saludo inicial y fecha en grande
-st.markdown(f"<h1>¡Hola!, {usuario_actual} {icono}</h1>", unsafe_allow_html=True)
+# Saludo inicial y fecha
+st.markdown(f"<h1>¡Hola, {usuario_actual}! {icono}</h1>", unsafe_allow_html=True)
 st.markdown(f"### 📅 {fecha_linda}")
 
 dias_faltantes = (next_cycle_start - datetime.datetime.now()).days
 st.caption(f"Faltan **{max(0, dias_faltantes)} días** para el final de tu ciclo (Cierre día {DIA_CIERRE}).")
 
-# CARTEL DE COBRO SI ES EL DÍA EXACTO DE CIERRE
+# CARTEL DE COBRO
 is_cierre_day = (now.day == DIA_CIERRE)
 if is_cierre_day:
     st.warning(f"💰 **¡Es día de cierre ({DIA_CIERRE})!** Registra tu sueldo y decide qué hacer con el saldo sobrante en la pestaña 'Ciclos'.")
@@ -307,7 +343,7 @@ if not df_cycle.empty:
 
 saldo_actual = total_ingresos - total_gastos
 
-# CÁLCULO DE SALDO NETO (Agregando pendientes y devoluciones activas)
+# CÁLCULO DE SALDO NETO
 total_pendientes_activos = sum([p["monto"] for p in st.session_state.pendings if p.get("estado", "pendiente") == "pendiente"])
 total_devoluciones_activas = sum([r["monto"] for r in st.session_state.returns if r.get("estado", "pendiente") == "pendiente"])
 saldo_neto = saldo_actual - total_pendientes_activos + total_devoluciones_activas
@@ -393,7 +429,7 @@ with tab1:
 
     st.divider()
     
-    # SECCIÓN DE GESTIÓN DE PAGOS Y DEVOLUCIONES PENDIENTES (DOBLE COLUMNA)
+    # SECCIÓN DE GESTIÓN DE PAGOS Y DEVOLUCIONES PENDIENTES
     col_izq, col_der = st.columns(2)
     
     with col_izq:
@@ -421,7 +457,6 @@ with tab1:
             for row in pendientes_activos:
                 st.markdown(f"**{row['concepto']}** - \${row['monto']:,.0f} <br><small>{row['fecha']}</small>", unsafe_allow_html=True)
                 if st.button("✅ Pagado", key=f"pagar_{row['id']}"):
-                    # Registrar como gasto automático
                     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     st.session_state.transactions.append({
                         "timestamp": ts,
@@ -432,7 +467,6 @@ with tab1:
                     })
                     save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
                     
-                    # Marcar como pagado
                     for p in st.session_state.pendings:
                         if p["id"] == row["id"]:
                             p["estado"] = "pagado"
@@ -467,7 +501,6 @@ with tab1:
             for row in devoluciones_activas:
                 st.markdown(f"**{row['concepto']}** - \${row['monto']:,.0f} <br><small>{row['fecha']}</small>", unsafe_allow_html=True)
                 if st.button("📥 Devuelto", key=f"devolver_{row['id']}"):
-                    # Registrar como ingreso automático
                     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     st.session_state.transactions.append({
                         "timestamp": ts,
@@ -478,7 +511,6 @@ with tab1:
                     })
                     save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
                     
-                    # Marcar como devuelto
                     for r in st.session_state.returns:
                         if r["id"] == row["id"]:
                             r["estado"] = "devuelto"
@@ -495,14 +527,13 @@ with tab1:
     col3.metric("Gastos del Ciclo", f"${total_gastos:,.0f}")
 
 # ==============================================================
-# PESTAÑA 2: BALANCE (GRÁFICO ORDENADO Y EN VALORES ABSOLUTOS)
+# PESTAÑA 2: BALANCE
 # ==============================================================
 with tab2:
     st.subheader("📊 Gastos por Categoría")
     if not df_cycle.empty:
         df_g = df_cycle[df_cycle["tipo"] == "gasto"]
         if not df_g.empty:
-            # Agrupar por categoría y ordenar de mayor a menor gasto absoluto
             df_grouped = df_g.groupby("categoria")["monto"].sum().reset_index()
             df_grouped = df_grouped.sort_values(by="monto", ascending=False)
             
@@ -510,7 +541,6 @@ with tab2:
                 df_grouped, values="monto", names="categoria", hole=0.4, 
                 color_discrete_sequence=px.colors.qualitative.Set1
             )
-            # Mostrar valores absolutos en los textos del gráfico
             fig.update_traces(textinfo='label+value', texttemplate='%{label}: $%{value:,.0f}')
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -688,4 +718,3 @@ with tab6:
                     st.rerun()
     else:
         st.info("Aún no tienes notas guardadas en tu Segundo Cerebro.")
-        
