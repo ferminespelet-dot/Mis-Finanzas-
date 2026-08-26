@@ -385,7 +385,7 @@ if not st.session_state.get("mostrar_reporte", False):
                     }}
                     """
                     # MODELO UNIVERSAL A PRUEBA DE FALLOS 404
-                    response = client.models.generate_content(model='gemini-pro', contents=prompt)
+                    response = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
                     text_res = response.text.replace("```json", "").replace("```", "").strip()
                     data = json.loads(text_res)
                     
@@ -499,12 +499,12 @@ if not st.session_state.get("mostrar_reporte", False):
                         if "ey, cerebro" in raw_thought.lower() or "ey cerebro" in raw_thought.lower():
                             prompt_ia = f"Eres 'Cerebro', la IA personal de {usuario}. Responde a la siguiente consulta del usuario de forma útil, concisa y amigable: {raw_thought}"
                             # MODELO UNIVERSAL
-                            res_ia = client.models.generate_content(model='gemini-pro', contents=prompt_ia)
+                            res_ia = client.models.generate_content(model='gemini-1.5-flash', contents=prompt_ia)
                             respuesta_texto = res_ia.text.strip()
                             
                             prompt_titulo = f"Crea un título corto con un emoji al inicio para esta consulta: '{raw_thought}'. Devuelve solo el texto con el emoji."
                             # MODELO UNIVERSAL
-                            res_titulo = client.models.generate_content(model='gemini-pro', contents=prompt_titulo)
+                            res_titulo = client.models.generate_content(model='gemini-1.5-flash', contents=prompt_titulo)
                             titulo_con_emoji = res_titulo.text.strip().replace('"', '')
                             
                             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -524,7 +524,7 @@ if not st.session_state.get("mostrar_reporte", False):
                                 f"Texto: '{raw_thought}'"
                             )
                             # MODELO UNIVERSAL
-                            resp = client.models.generate_content(model='gemini-pro', contents=prompt)
+                            resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
                             tr = resp.text.strip().replace("```json", "").replace("```", "").strip()
                             new_thoughts = json.loads(tr)
                             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -576,7 +576,7 @@ if not st.session_state.get("mostrar_reporte", False):
                                         historial_texto = "\n".join([f"{'Usuario' if m['autor']=='usuario' else 'Cerebro'}: {m['texto']}" for m in t["mensajes"]])
                                         prompt_ia = f"Eres 'Cerebro', la IA personal de {usuario}. El usuario te acaba de invocar.\n\nHistorial:\n{historial_texto}\n\nResponde útil, conciso y amigable."
                                         # MODELO UNIVERSAL
-                                        res_ia = client.models.generate_content(model='gemini-pro', contents=prompt_ia)
+                                        res_ia = client.models.generate_content(model='gemini-1.5-flash', contents=prompt_ia)
                                         t["mensajes"].append({"autor": "assistant", "texto": res_ia.text.strip()})
                                     except Exception as e:
                                         t["mensajes"].append({"autor": "assistant", "texto": f"Error: {e}"})
@@ -633,7 +633,7 @@ if not st.session_state.get("mostrar_reporte", False):
                         }}
                         """
                         # MODELO UNIVERSAL
-                        res = client.models.generate_content(model='gemini-pro', contents=prompt)
+                        res = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
                         text_res = res.text.replace("```json", "").replace("```", "").strip()
                         st.session_state.wishlist_ia_results = json.loads(text_res)
                     except Exception as e:
