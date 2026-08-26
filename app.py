@@ -36,7 +36,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================
-# 2. CONEXIÓN A GOOGLE SHEETS (SISTEMA DE FILAS REALES)
+# 2. CONEXIÓN A GOOGLE SHEETS
 # ==============================================================
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -59,7 +59,6 @@ def get_or_create_worksheet(sh, title, headers):
         ws.append_row(headers)
         return ws
 
-# Función para Configuraciones pequeñas (PINs y Categorías)
 def load_config(key, default):
     try:
         sh = get_google_client()
@@ -83,13 +82,11 @@ def save_config(key, data):
     except Exception as e:
         st.error(f"Error guardando configuración: {e}")
 
-# Funciones para Tablas Reales (Gastos, Ahorros, etc. FILA POR FILA)
 def load_table(ws_title, headers, json_cols=[]):
     try:
         sh = get_google_client()
         ws = get_or_create_worksheet(sh, ws_title, headers)
         records = ws.get_all_records()
-        # Reconvertir columnas anidadas si las hay (como los mensajes del Cerebro)
         for r in records:
             for col in json_cols:
                 if col in r and isinstance(r[col], str):
@@ -105,7 +102,7 @@ def save_table(ws_title, headers, data_list, json_cols=[]):
     try:
         sh = get_google_client()
         ws = get_or_create_worksheet(sh, ws_title, headers)
-        ws.clear() # Limpiamos y reescribimos todo prolijo
+        ws.clear()
         
         data_matrix = [headers]
         for row in data_list:
@@ -120,7 +117,7 @@ def save_table(ws_title, headers, data_list, json_cols=[]):
         try:
             ws.update(values=data_matrix, range_name="A1")
         except TypeError:
-            ws.update(data_matrix) # Versiones más antiguas
+            ws.update(data_matrix)
             
     except Exception as e:
         st.error(f"Error guardando tabla {ws_title}: {e}")
@@ -139,7 +136,7 @@ def get_dolar_blue():
     return 1300
 
 def iniciar_sesion(usuario):
-    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "last_added", "recomendacion_ia"]:
+    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "returns", "last_added", "recomendacion_ia"]:
         if key in st.session_state:
             del st.session_state[key]
     st.session_state.usuario_autenticado = usuario
@@ -147,12 +144,11 @@ def iniciar_sesion(usuario):
 
 def cerrar_sesion():
     st.session_state.usuario_autenticado = None
-    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "last_added", "recomendacion_ia"]:
+    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "returns", "last_added", "recomendacion_ia"]:
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
 
-# 3. GESTIÓN DE SEGURIDAD (PIN)
 passwords_guardadas = load_config("pins_security", {})
 
 if "usuario_autenticado" not in st.session_state:
@@ -204,6 +200,9 @@ if st.session_state.usuario_autenticado is None:
 usuario_actual = st.session_state.usuario_autenticado
 sufijo = "Fermin" if usuario_actual == "Fermín" else "Irina"
 
+# Día de cierre según el usuario (Fermín = 28, Irina = 22)
+DIA_CIERRE = 28 if usuario_actual == "Fermín" else 22
+
 def obtener_categorias_iniciales(usuario):
     base = {
         "Fútbol y Cancha": ["futbol", "fútbol", "cancha", "pelota", "choripan", "entrada", "estudiantes", "el pincha", "pincha", "estadio"],
@@ -230,7 +229,7 @@ def obtener_categorias_iniciales(usuario):
         
     return base
 
-# CARGA DE TABLAS REALES (Fila por fila)
+# CARGA DE TABLAS
 if "categories" not in st.session_state:
     st.session_state.categories = load_config(f"categorias_{sufijo}", obtener_categorias_iniciales(usuario_actual))
 if "transactions" not in st.session_state:
@@ -238,7 +237,9 @@ if "transactions" not in st.session_state:
 if "savings" not in st.session_state:
     st.session_state.savings = load_table(f"Ahorros_{sufijo}", ["fecha", "pesos_ahorrados", "cotizacion_blue", "dolares"])
 if "pendings" not in st.session_state:
-    st.session_state.pendings = load_table(f"Pendientes_{sufijo}", ["id", "concepto", "monto", "fecha"])
+    st.session_state.pendings = load_table(f"Pendientes_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"])
+if "returns" not in st.session_state:
+    st.session_state.returns = load_table(f"Devoluciones_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"])
 if "thoughts" not in st.session_state:
     st.session_state.thoughts = load_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], json_cols=["mensajes"])
 if "recomendacion_ia" not in st.session_state:
@@ -252,23 +253,39 @@ if st.sidebar.button("🚪 Cerrar Sesión", type="primary"):
 
 dolar_blue_venta = get_dolar_blue()
 
+# CÁLCULO DE CICLOS PERSONALIZADOS (28 o 22)
 now = datetime.datetime.now()
-if now.day >= 28:
-    current_cycle_start = datetime.datetime(now.year, now.month, 28)
+if now.day >= DIA_CIERRE:
+    current_cycle_start = datetime.datetime(now.year, now.month, DIA_CIERRE)
     if now.month == 12:
-        next_cycle_start = datetime.datetime(now.year + 1, 1, 28)
+        next_cycle_start = datetime.datetime(now.year + 1, 1, DIA_CIERRE)
     else:
-        next_cycle_start = datetime.datetime(now.year, now.month + 1, 28)
+        next_cycle_start = datetime.datetime(now.year, now.month + 1, DIA_CIERRE)
 else:
     if now.month == 1:
-        current_cycle_start = datetime.datetime(now.year - 1, 12, 28)
+        current_cycle_start = datetime.datetime(now.year - 1, 12, DIA_CIERRE)
     else:
-        current_cycle_start = datetime.datetime(now.year, now.month - 1, 28)
-    next_cycle_start = datetime.datetime(now.year, now.month, 28)
+        current_cycle_start = datetime.datetime(now.year, now.month - 1, DIA_CIERRE)
+    next_cycle_start = datetime.datetime(now.year, now.month, DIA_CIERRE)
+
+# FORMATEO DE FECHA EN ESPAÑOL
+dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+meses_anio = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+fecha_linda = f"{dias_semana[now.weekday()]} {now.day} de {meses_anio[now.month - 1]}"
 
 icono = "🍊" if usuario_actual == "Fermín" else "🌸"
-st.title(f"Hola, {usuario_actual} {icono}")
-st.caption(f"Tu espacio de Finanzas & Cerebro (Base de datos Tabular 📊)")
+
+# Saludo inicial y fecha en grande
+st.markdown(f"<h1>¡Hola!, {usuario_actual} {icono}</h1>", unsafe_allow_html=True)
+st.markdown(f"### 📅 {fecha_linda}")
+
+dias_faltantes = (next_cycle_start - datetime.datetime.now()).days
+st.caption(f"Faltan **{max(0, dias_faltantes)} días** para el final de tu ciclo (Cierre día {DIA_CIERRE}).")
+
+# CARTEL DE COBRO SI ES EL DÍA EXACTO DE CIERRE
+is_cierre_day = (now.day == DIA_CIERRE)
+if is_cierre_day:
+    st.warning(f"💰 **¡Es día de cierre ({DIA_CIERRE})!** Registra tu sueldo y decide qué hacer con el saldo sobrante en la pestaña 'Ciclos'.")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro"
@@ -289,7 +306,11 @@ if not df_cycle.empty:
     total_gastos = df_cycle[df_cycle["tipo"] == "gasto"]["monto"].sum()
 
 saldo_actual = total_ingresos - total_gastos
-dias_faltantes = (next_cycle_start - datetime.datetime.now()).days
+
+# CÁLCULO DE SALDO NETO (Agregando pendientes y devoluciones activas)
+total_pendientes_activos = sum([p["monto"] for p in st.session_state.pendings if p.get("estado", "pendiente") == "pendiente"])
+total_devoluciones_activas = sum([r["monto"] for r in st.session_state.returns if r.get("estado", "pendiente") == "pendiente"])
+saldo_neto = saldo_actual - total_pendientes_activos + total_devoluciones_activas
 
 # ==============================================================
 # PESTAÑA 1: REGISTRO 
@@ -330,7 +351,7 @@ with tab1:
                     prompt = f"""
                     Eres un asistente financiero personal experto de {usuario_actual}. 
                     Categorías válidas: {json.dumps(cat_list, ensure_ascii=False)}.
-                    Saldo actual: ${saldo_actual}. Días hasta cobrar (cierre 28): {dias_faltantes}.
+                    Saldo actual: ${saldo_actual}. Días hasta cobrar (cierre {DIA_CIERRE}): {dias_faltantes}.
                     {historial_reciente}
                     
                     Analiza este nuevo texto: "{user_input}"
@@ -362,7 +383,6 @@ with tab1:
                         tx["timestamp"] = ts
                         st.session_state.transactions.append(tx)
                     
-                    # GUARDA EN UNA NUEVA TABLA FILA POR FILA
                     save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions) 
                     
                     st.session_state["last_added"] = new_txs
@@ -373,73 +393,125 @@ with tab1:
 
     st.divider()
     
-    st.subheader("📌 Vencimientos")
-    with st.expander("➕ Agregar nuevo pago pendiente"):
-        with st.form("pending_form", clear_on_submit=True):
-            p_concepto = st.text_input("Concepto (Ej: Sala de ensayo, Spotify)")
-            p_monto = st.number_input("Monto estimado ($)", min_value=0.0, step=1000.0)
-            val_fecha = datetime.date.today() + datetime.timedelta(days=5)
-            p_fecha = st.date_input("Fecha límite", value=val_fecha)
-            
-            if st.form_submit_button("Guardar Pendiente") and p_concepto:
-                st.session_state.pendings.append({
-                    "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
-                    "concepto": p_concepto,
-                    "monto": p_monto,
-                    "fecha": str(p_fecha)
-                })
-                save_table(f"Pendientes_{sufijo}", ["id", "concepto", "monto", "fecha"], st.session_state.pendings)
-                st.success("¡Guardado!")
-                st.rerun()
-
-    if st.session_state.pendings:
-        df_p = pd.DataFrame(st.session_state.pendings)
-        df_p["fecha_dt"] = pd.to_datetime(df_p["fecha"])
-        df_p = df_p.sort_values(by="fecha_dt")
-        for idx, row in df_p.iterrows():
-            hoy = pd.to_datetime(datetime.date.today())
-            fecha_v = pd.to_datetime(row["fecha"])
-            d_left = (fecha_v - hoy).days
-            
-            badge = f"⚠️ Faltan {d_left} días" if d_left >= 0 else "❗ VENCIDO"
+    # SECCIÓN DE GESTIÓN DE PAGOS Y DEVOLUCIONES PENDIENTES (DOBLE COLUMNA)
+    col_izq, col_der = st.columns(2)
+    
+    with col_izq:
+        st.subheader("📌 Pagos Pendientes")
+        with st.expander("➕ Agregar pago"):
+            with st.form("pending_form", clear_on_submit=True):
+                p_concepto = st.text_input("Concepto (Ej: Sala de ensayo)")
+                p_monto = st.number_input("Monto ($)", min_value=0.0, step=1000.0, key="m_p")
+                p_fecha = st.date_input("Fecha límite", value=datetime.date.today(), key="f_p")
                 
-            col_a, col_b = st.columns([3, 1])
-            with col_a:
-                st.markdown(
-                    f"**{row['concepto']}** - \${row['monto']:,.0f} <br>"
-                    f"<small>{row['fecha']} | *{badge}*</small>", 
-                    unsafe_allow_html=True
-                )
-            with col_b:
-                if st.button("✅ Pagado", key=f"del_p_{row['id']}"):
-                    st.session_state.pendings = [p for p in st.session_state.pendings if p["id"] != row["id"]]
-                    save_table(f"Pendientes_{sufijo}", ["id", "concepto", "monto", "fecha"], st.session_state.pendings)
+                if st.form_submit_button("Guardar") and p_concepto:
+                    st.session_state.pendings.append({
+                        "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+                        "concepto": p_concepto,
+                        "monto": p_monto,
+                        "fecha": str(p_fecha),
+                        "estado": "pendiente"
+                    })
+                    save_table(f"Pendientes_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], st.session_state.pendings)
+                    st.success("¡Guardado!")
                     st.rerun()
-            st.divider()
 
-    st.subheader("📊 Resumen del Ciclo")
+        pendientes_activos = [p for p in st.session_state.pendings if p.get("estado", "pendiente") == "pendiente"]
+        if pendientes_activos:
+            for row in pendientes_activos:
+                st.markdown(f"**{row['concepto']}** - \${row['monto']:,.0f} <br><small>{row['fecha']}</small>", unsafe_allow_html=True)
+                if st.button("✅ Pagado", key=f"pagar_{row['id']}"):
+                    # Registrar como gasto automático
+                    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    st.session_state.transactions.append({
+                        "timestamp": ts,
+                        "tipo": "gasto",
+                        "monto": row["monto"],
+                        "descripcion": f"Pago pendiente: {row['concepto']}",
+                        "categoria": "Otros"
+                    })
+                    save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
+                    
+                    # Marcar como pagado
+                    for p in st.session_state.pendings:
+                        if p["id"] == row["id"]:
+                            p["estado"] = "pagado"
+                    save_table(f"Pendientes_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], st.session_state.pendings)
+                    st.rerun()
+                st.divider()
+        else:
+            st.info("Sin pagos pendientes.")
+
+    with col_der:
+        st.subheader("📥 Devoluciones")
+        with st.expander("➕ Agregar devolución"):
+            with st.form("return_form", clear_on_submit=True):
+                r_concepto = st.text_input("Concepto (Ej: Amigo debe entrada)", key="c_r")
+                r_monto = st.number_input("Monto ($)", min_value=0.0, step=1000.0, key="m_r")
+                r_fecha = st.date_input("Fecha estimada", value=datetime.date.today(), key="f_r")
+                
+                if st.form_submit_button("Guardar") and r_concepto:
+                    st.session_state.returns.append({
+                        "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+                        "concepto": r_concepto,
+                        "monto": r_monto,
+                        "fecha": str(r_fecha),
+                        "estado": "pendiente"
+                    })
+                    save_table(f"Devoluciones_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], st.session_state.returns)
+                    st.success("¡Guardado!")
+                    st.rerun()
+
+        devoluciones_activas = [r for r in st.session_state.returns if r.get("estado", "pendiente") == "pendiente"]
+        if devoluciones_activas:
+            for row in devoluciones_activas:
+                st.markdown(f"**{row['concepto']}** - \${row['monto']:,.0f} <br><small>{row['fecha']}</small>", unsafe_allow_html=True)
+                if st.button("📥 Devuelto", key=f"devolver_{row['id']}"):
+                    # Registrar como ingreso automático
+                    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    st.session_state.transactions.append({
+                        "timestamp": ts,
+                        "tipo": "ingreso",
+                        "monto": row["monto"],
+                        "descripcion": f"Devolución recibida: {row['concepto']}",
+                        "categoria": "Devoluciones"
+                    })
+                    save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
+                    
+                    # Marcar como devuelto
+                    for r in st.session_state.returns:
+                        if r["id"] == row["id"]:
+                            r["estado"] = "devuelto"
+                    save_table(f"Devoluciones_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], st.session_state.returns)
+                    st.rerun()
+                st.divider()
+        else:
+            st.info("Sin devoluciones pendientes.")
+
+    st.subheader("📊 Resumen Financiero")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Saldo Disp.", f"${saldo_actual:,.0f}")
-    col2.metric("Gastos", f"${total_gastos:,.0f}")
-    
-    total_dias = (next_cycle_start - current_cycle_start).days
-    dias_pasados = (datetime.datetime.now() - current_cycle_start).days
-    progreso = min(1.0, max(0.0, dias_pasados / total_dias))
-    
-    col3.progress(progreso, text=f"Faltan {max(0, dias_faltantes)} d.")
+    col1.metric("Saldo Real", f"${saldo_actual:,.0f}")
+    col2.metric("Saldo Neto (Ajustado)", f"${saldo_neto:,.0f}")
+    col3.metric("Gastos del Ciclo", f"${total_gastos:,.0f}")
 
 # ==============================================================
-# PESTAÑA 2: BALANCE
+# PESTAÑA 2: BALANCE (GRÁFICO ORDENADO Y EN VALORES ABSOLUTOS)
 # ==============================================================
 with tab2:
     st.subheader("📊 Gastos por Categoría")
     if not df_cycle.empty:
         df_g = df_cycle[df_cycle["tipo"] == "gasto"]
         if not df_g.empty:
+            # Agrupar por categoría y ordenar de mayor a menor gasto absoluto
+            df_grouped = df_g.groupby("categoria")["monto"].sum().reset_index()
+            df_grouped = df_grouped.sort_values(by="monto", ascending=False)
+            
             fig = px.pie(
-                df_g, values="monto", names="categoria", hole=0.4, 
+                df_grouped, values="monto", names="categoria", hole=0.4, 
                 color_discrete_sequence=px.colors.qualitative.Set1
             )
+            # Mostrar valores absolutos en los textos del gráfico
+            fig.update_traces(textinfo='label+value', texttemplate='%{label}: $%{value:,.0f}')
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No hay gastos registrados en este ciclo mensual.")
@@ -485,7 +557,7 @@ with tab3:
 # PESTAÑA 4: CICLOS Y AHORROS
 # ==============================================================
 with tab4:
-    st.subheader("📅 Cierre de Mes (Día 28)")
+    st.subheader(f"📅 Cierre de Mes (Día {DIA_CIERRE})")
     st.markdown(f"💱 **Dólar Blue Actual:** \${dolar_blue_venta:,.2f} ARS")
     leftover = st.number_input("Saldo sobrante a guardar ($):", min_value=0.0, value=float(max(0, saldo_actual)), step=1000.0)
     
@@ -616,3 +688,4 @@ with tab6:
                     st.rerun()
     else:
         st.info("Aún no tienes notas guardadas en tu Segundo Cerebro.")
+        
