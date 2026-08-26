@@ -243,7 +243,7 @@ with tab1:
                     )
                     
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash', 
+                        model='gemini-3.6-flash', 
                         contents=prompt
                     )
                     
@@ -445,7 +445,7 @@ with tab6:
                         f"Texto: '{raw_thought}'"
                     )
                     resp = client.models.generate_content(
-                        model='gemini-2.5-flash', 
+                        model='gemini-3.6-flash', 
                         contents=prompt
                     )
                     
