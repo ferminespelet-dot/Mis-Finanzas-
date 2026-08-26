@@ -53,8 +53,7 @@ def get_dolar_blue():
     return 1300
 
 def iniciar_sesion(usuario):
-    # Limpiamos la memoria para que cargue los datos del usuario correcto
-    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "last_added"]:
+    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "last_added", "recomendacion_ia"]:
         if key in st.session_state:
             del st.session_state[key]
     st.session_state.usuario_autenticado = usuario
@@ -62,7 +61,7 @@ def iniciar_sesion(usuario):
 
 def cerrar_sesion():
     st.session_state.usuario_autenticado = None
-    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "last_added"]:
+    for key in ["categories", "transactions", "savings", "thoughts", "pendings", "last_added", "recomendacion_ia"]:
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
@@ -75,7 +74,7 @@ if "usuario_autenticado" not in st.session_state:
     st.session_state.usuario_autenticado = None
 
 # ==============================================================
-# PANTALLA DE LOGIN (Si nadie inició sesión)
+# PANTALLA DE LOGIN
 # ==============================================================
 if st.session_state.usuario_autenticado is None:
     st.markdown("<h1 style='text-align: center;'>Finanzas & Cerebro 🧠</h1>", unsafe_allow_html=True)
@@ -85,7 +84,6 @@ if st.session_state.usuario_autenticado is None:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         usuario_seleccionado = st.radio("Perfil:", ["Fermín", "Irina"], horizontal=True, label_visibility="collapsed")
-        
         st.markdown("<br>", unsafe_allow_html=True)
         
         if usuario_seleccionado in passwords_guardadas:
@@ -113,15 +111,14 @@ if st.session_state.usuario_autenticado is None:
                 else:
                     st.error("El PIN debe contener únicamente números.")
     
-    # Detenemos la app acá para que NO se vea el resto
     st.stop()
 
 # ==============================================================
-# PANTALLA PRINCIPAL DE LA APP (Si ya iniciaron sesión)
+# PANTALLA PRINCIPAL DE LA APP
 # ==============================================================
 usuario_actual = st.session_state.usuario_autenticado
 
-# Asignación de archivos independientes por usuario
+# 100% INDEPENDENCIA DE ARCHIVOS
 sufijo = "" if usuario_actual == "Fermín" else "_irina"
 DATA_FILE = f"transactions{sufijo}.json"
 CATEGORIES_FILE = f"categories{sufijo}.json"
@@ -129,25 +126,33 @@ SAVINGS_FILE = f"savings{sufijo}.json"
 THOUGHTS_FILE = f"thoughts{sufijo}.json"
 PENDINGS_FILE = f"pendings{sufijo}.json"
 
-# Categorías por defecto
-DEFAULT_CATEGORIES = {
-    "Irina/Fermin": ["novio", "novia", "amor", "regalo", "pareja"],
-    "Futbol": ["futbol", "fútbol", "cancha", "pelota"],
-    "Supermercado": ["supermercado", "super", "almacén", "verdulería", "hiper"],
-    "Comida": ["comida", "hamburguesa", "pizza", "delivery"],
-    "Kiosco": ["coquita", "alfajor", "gomitas", "sube"],
-    "Tabaco": ["cigarrillos", "tabaco", "filtros", "pucho"],
-    "Café y panadería": ["café", "merienda", "torta", "facturas"],
-    "Bazar": ["bazar", "poster", "sahumerios", "librería"],
-    "Salidas": ["cerveza", "boliche", "salidas", "barcito"],
-    "Bebida": ["vino", "cerveza", "alcohol"],
-    "Otros": ["libro", "ropa", "stickers", "perdí"],
-    "Música": ["cuerdas", "púas", "cables", "sala", "música"],
-    "Devoluciones": ["devuelve", "devolvió", "reembolso"]
-}
+# GENERADOR DE CATEGORÍAS PERSONALIZADAS POR USUARIO
+def obtener_categorias_iniciales(usuario):
+    base = {
+        "Fútbol y Cancha": ["futbol", "fútbol", "cancha", "pelota", "choripan", "entrada", "estudiantes", "el pincha", "pincha", "estadio"],
+        "Paseos y Salidas": ["museos", "museo", "paseo", "capital", "buenos aires", "helado", "cerveza", "barcito", "salidas"],
+        "Bolucompras": ["bolucompras", "boludeces", "chucherias", "kiosco", "alfajor", "gomitas", "energizante"],
+        "Librería y Facu": ["libreria", "útiles escolares", "fotocopias", "gomaeva", "articulos para el jardin", "marionetas", "tela", "temperas", "pintura", "jardín"],
+        "Supermercado": ["supermercado", "super", "almacén", "verdulería", "hiper"],
+        "Comida y Delivery": ["comida", "hamburguesa", "pizza", "delivery", "pedidosya", "rappi"],
+        "Transporte": ["sube", "colectivo", "tren", "uber", "taxi", "nafta"],
+        "Suscripciones": ["netflix", "spotify", "gimnasio", "internet", "celular"],
+        "Tabaco": ["cigarrillos", "tabaco", "filtros", "pucho"],
+        "Música": ["cuerdas", "púas", "cables", "sala", "música", "recitales"],
+        "Devoluciones": ["devuelve", "devolvió", "reembolso"],
+        "Otros": ["ropa", "perdí", "stickers"]
+    }
+    
+    # INDEPENDENCIA DE PAREJA
+    if usuario == "Fermín":
+        base["Irina"] = ["irina", "iri", "novia", "amor", "regalos", "flores a iri", "ella"]
+    else:
+        base["Fermín"] = ["fermin", "fer", "novio", "amor", "regalos", "él"]
+        
+    return base
 
 if "categories" not in st.session_state:
-    st.session_state.categories = load_json(CATEGORIES_FILE, DEFAULT_CATEGORIES)
+    st.session_state.categories = load_json(CATEGORIES_FILE, obtener_categorias_iniciales(usuario_actual))
 if "transactions" not in st.session_state:
     st.session_state.transactions = load_json(DATA_FILE, [])
 if "savings" not in st.session_state:
@@ -156,8 +161,10 @@ if "thoughts" not in st.session_state:
     st.session_state.thoughts = load_json(THOUGHTS_FILE, [])
 if "pendings" not in st.session_state:
     st.session_state.pendings = load_json(PENDINGS_FILE, [])
+if "recomendacion_ia" not in st.session_state:
+    st.session_state.recomendacion_ia = ""
 
-# BARRA LATERAL (Sidebar)
+# BARRA LATERAL
 st.sidebar.header("⚙️ Configuración")
 api_key = st.sidebar.text_input("Gemini API Key", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 st.sidebar.divider()
@@ -183,7 +190,7 @@ else:
 
 icono = "🍊" if usuario_actual == "Fermín" else "🌸"
 st.title(f"Hola, {usuario_actual} {icono}")
-st.caption("Tu espacio de Finanzas & Cerebro")
+st.caption(f"Tu espacio de Finanzas & Cerebro (Sesión 100% Privada)")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro"
@@ -205,14 +212,15 @@ if not df_cycle.empty:
     total_gastos = df_cycle[df_cycle["tipo"] == "gasto"]["monto"].sum()
 
 saldo_actual = total_ingresos - total_gastos
+dias_faltantes = (next_cycle_start - datetime.datetime.now()).days
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO
+# PESTAÑA 1: REGISTRO (CON APRENDIZAJE IA)
 # ==============================================================
 with tab1:
     st.markdown("### 🎙️ Registro Rápido")
     
-    user_input = st.text_area("Registro", placeholder="Ej: Compré un alfajor por 2000...", height=100, label_visibility="collapsed")
+    user_input = st.text_area("Registro", placeholder="Ej: Dos choripanes en la cancha por 5000...", height=100, label_visibility="collapsed")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -223,36 +231,57 @@ with tab1:
     if mic_btn:
         st.info("💡 Usa el micrófono del teclado de tu celular para dictar el gasto.")
 
+    if st.session_state.recomendacion_ia:
+        st.warning(f"💡 **Consejo de tu IA:** {st.session_state.recomendacion_ia}")
+
     if procesar:
         if not api_key:
-            st.error("Configura tu API Key de Gemini en la barra lateral izquierda.")
+            st.error("Falta tu API Key de Gemini en los Secretos.")
         elif not user_input.strip():
             st.warning("Escribe o dicta algo para registrar.")
         else:
-            with st.spinner("Analizando con Inteligencia Artificial..."):
+            with st.spinner("La IA está procesando y pensando..."):
                 try:
                     client = genai.Client(api_key=api_key)
                     cat_list = list(st.session_state.categories.keys())
-                    prompt = (
-                        "Analiza el texto de finanzas personales. Categorías disponibles: "
-                        f"{json.dumps(cat_list)}. "
-                        "Devuelve un JSON estricto con una lista de objetos que contengan: "
-                        "'tipo' (gasto o ingreso), 'monto' (número exacto sin símbolos), "
-                        "'descripcion' (detalle breve) y 'categoria' (una válida de la lista). "
-                        f"Texto a analizar: '{user_input}'"
-                    )
                     
+                    # HISTORIAL PARA APRENDIZAJE: Le pasamos los últimos 5 gastos para que entienda el contexto
+                    historial_reciente = ""
+                    if not df_cycle.empty:
+                        ultimos_gastos = df_cycle.tail(5)[["descripcion", "categoria", "monto"]].to_dict('records')
+                        historial_reciente = f"Tus últimos gastos fueron: {ultimos_gastos}."
+                    
+                    prompt = f"""
+                    Eres un asistente financiero personal experto de {usuario_actual}.
+                    Categorías válidas: {json.dumps(cat_list, ensure_ascii=False)}.
+                    Saldo actual: ${saldo_actual}. Días hasta cobrar: {dias_faltantes}.
+                    {historial_reciente}
+                    
+                    Aprende del historial para deducir categorías de rutinas.
+                    Analiza este nuevo texto: "{user_input}"
+                    
+                    Devuelve ESTRICTAMENTE este JSON:
+                    {{
+                        "movimientos": [
+                            {{"tipo": "gasto" o "ingreso", "monto": numero_exacto, "descripcion": "detalle", "categoria": "CATEGORIA_VALIDA"}}
+                        ],
+                        "recomendacion": "OPCIONAL. Escribe un mensaje (con un emoji) SOLO si el usuario está gastando muy rápido dado su saldo y días restantes, o si notas un patrón nuevo y le sugieres crear una nueva categoría. Si todo está normal, deja esto vacío ''."
+                    }}
+                    """
+                    
+                    # ACTUALIZADO AL ÚLTIMO MODELO DE GOOGLE
                     response = client.models.generate_content(
-                        model='gemini-3.6-flash', 
+                        model='gemini-1.5-flash', 
                         contents=prompt
                     )
                     
                     text_res = response.text.strip()
-                    text_res = text_res.replace("```json", "")
-                    text_res = text_res.replace("```", "")
-                    text_res = text_res.strip()
+                    text_res = text_res.replace("```json", "").replace("```", "").strip()
                     
-                    new_txs = json.loads(text_res)
+                    data = json.loads(text_res)
+                    new_txs = data.get("movimientos", [])
+                    recomendacion = data.get("recomendacion", "")
+                    
                     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
                     for tx in new_txs:
@@ -260,11 +289,12 @@ with tab1:
                         st.session_state.transactions.append(tx)
                     
                     save_json(DATA_FILE, st.session_state.transactions)
-                    st.success("¡Movimiento registrado con éxito!")
+                    
                     st.session_state["last_added"] = new_txs
+                    st.session_state.recomendacion_ia = recomendacion
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error procesando: {e}")
+                    st.error(f"Error de conexión con IA: {e}")
 
     st.divider()
     
@@ -321,7 +351,6 @@ with tab1:
     dias_pasados = (datetime.datetime.now() - current_cycle_start).days
     progreso = min(1.0, max(0.0, dias_pasados / total_dias))
     
-    dias_faltantes = (next_cycle_start - datetime.datetime.now()).days
     col3.progress(progreso, text=f"Faltan {max(0, dias_faltantes)} d.")
 
 # ==============================================================
@@ -363,6 +392,7 @@ with tab3:
                 st.session_state.transactions.pop()
                 save_json(DATA_FILE, st.session_state.transactions)
                 st.success("Movimiento borrado exitosamente.")
+                st.session_state.recomendacion_ia = ""
                 st.rerun()
     else:
         st.write("Sin movimientos.")
@@ -430,7 +460,7 @@ with tab6:
     raw_thought = st.text_area("Notas", placeholder="Ej: Pensé en un riff... o me gustaría comprar X...", label_visibility="collapsed")
     if st.button("✨ Organizar Idea con IA", type="primary", use_container_width=True):
         if not api_key:
-            st.error("Falta tu API Key de Gemini. Ingrésala en la barra lateral (Configuración).")
+            st.error("Falta tu API Key de Gemini en los Secretos.")
         elif not raw_thought.strip():
             st.warning("Escribe algo para poder organizarlo.")
         else:
@@ -445,14 +475,12 @@ with tab6:
                         f"Texto: '{raw_thought}'"
                     )
                     resp = client.models.generate_content(
-                        model='gemini-3.6-flash', 
+                        model='gemini-1.5-flash', 
                         contents=prompt
                     )
                     
                     tr = resp.text.strip()
-                    tr = tr.replace("```json", "")
-                    tr = tr.replace("```", "")
-                    tr = tr.strip()
+                    tr = tr.replace("```json", "").replace("```", "").strip()
                     
                     new_thoughts = json.loads(tr)
                     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
