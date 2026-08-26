@@ -317,15 +317,12 @@ def formatear_tarjeta_movimiento(tx):
 # PESTAÑA 1: REGISTRO (ABRE POR DEFECTO)
 # ==============================================================
 with tab_registro:
-    # --------------------------------------------------------
-    # SUPER SALDO DESTACADO ARRIBA DE TODO
     st.markdown(f"""
     <div style='background-color: rgba(16, 185, 129, 0.1); border: 2px solid rgba(16, 185, 129, 0.3); padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 25px;'>
         <p style='margin: 0; font-size: 16px; color: gray; font-weight: 600;'>SALDO DISPONIBLE</p>
         <h1 style='margin: 0; font-size: 52px; font-weight: 900; color: #10B981;'>{simbolo_html}{saldo_real:,.0f}</h1>
     </div>
     """.replace(",", "."), unsafe_allow_html=True)
-    # --------------------------------------------------------
     
     st.markdown("### 🎙️ Nuevo Registro")
     user_input = st.text_area("Registro", placeholder="Ej: Supermercado 20000, se pagó mitad y mitad...", height=100, label_visibility="collapsed")
@@ -740,9 +737,10 @@ with tab_historial:
         df_display["Categoría"] = df_display["categoria"].str.capitalize()
         df_display["Descripción"] = df_display["descripcion"].str.capitalize()
         
+        # Aquí usamos simbolo_moneda ($) crudo para que la tabla lo lea bien y no se rompa
         def format_monto(row):
-            if row["tipo"] == "ingreso": return f"+ {simbolo_html}{row['monto']:,.0f}".replace(",", ".")
-            else: return f"- {simbolo_html}{row['monto']:,.0f}".replace(",", ".")
+            if row["tipo"] == "ingreso": return f"+ {simbolo_moneda}{row['monto']:,.0f}".replace(",", ".")
+            else: return f"- {simbolo_moneda}{row['monto']:,.0f}".replace(",", ".")
                 
         df_display["Monto"] = df_display.apply(format_monto, axis=1)
         df_display = df_display[["Fecha", "Categoría", "Descripción", "Monto"]]
@@ -772,7 +770,6 @@ with tab_ciclos:
     st.markdown(f"**Disponible de meses anteriores:** <span style='color:#10B981; font-weight:bold;'>{simbolo_html}{saldo_anterior_disponible:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
     st.caption("*(Tu sueldo del ciclo actual está protegido y no se puede guardar hasta el próximo cierre)*")
 
-    # 1. Menú SOLO para guardar en bolsillos (No incluye Saldo Principal)
     opc_bolsillos_solo = {}
     for b in st.session_state.bolsillos:
         d_name = b["nombre"]
@@ -781,7 +778,6 @@ with tab_ciclos:
             if wm: d_name = f"Meta: {wm['item']}"
         opc_bolsillos_solo[b["id"]] = d_name
 
-    # 2. Menú de opciones de destino PARA MOVER desde un bolsillo (SÍ incluye Saldo Principal)
     opc_mover_desde_bolsillo = {"saldo_principal": "⏪ Devolver al Saldo Principal"}
     opc_mover_desde_bolsillo.update(opc_bolsillos_solo)
 
@@ -869,12 +865,10 @@ with tab_ciclos:
                     
             with col_mov:
                 mover = st.number_input("💸 Mover plata", min_value=0.0, max_value=float(b["monto"]), key=f"mov_{b['id']}")
-                # Aca usamos el menú que SÍ tiene la opción de volver al Saldo Principal
                 dest = st.selectbox("Destino", [x for x in opc_mover_desde_bolsillo.keys() if x != b["id"]], format_func=lambda x: opc_mover_desde_bolsillo[x], key=f"dest_{b['id']}")
                 if st.button("Transferir", key=f"btn_mov_{b['id']}") and mover > 0:
                     b["monto"] -= mover
                     if dest == "saldo_principal":
-                        # Ya se descontó del bolsillo, al no sumarlo a otro, el saldo real de la app sube automáticamente
                         pass
                     else:
                         for dest_b in st.session_state.bolsillos:
@@ -938,6 +932,33 @@ with tab_ajustes:
                 save_config(f"settings_{sufijo}", user_settings)
                 st.success("¡Ajustes guardados!")
                 st.rerun()
+                
+    st.divider()
+    
+    # --------------------------------------------------------
+    # NUEVO: ZONA DE PELIGRO (RESET DE DATOS)
+    # --------------------------------------------------------
+    with st.expander("⚠️ Zona de Peligro"):
+        st.warning("Las siguientes acciones borrarán tu información de manera permanente.")
+        if st.button("🗑️ Borrar todos mis datos y empezar de cero", type="primary", use_container_width=True):
+            # Vaciar en memoria
+            st.session_state.transactions = []
+            st.session_state.pendings = []
+            st.session_state.returns = []
+            st.session_state.thoughts = []
+            st.session_state.wishlist = []
+            st.session_state.bolsillos = [{"id": "b_default", "nombre": "Ahorro General", "ubicacion": "Cuenta DNI", "monto": 0.0, "wishlist_id": ""}]
+            
+            # Vaciar en Google Sheets
+            save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], [])
+            save_table(f"Pendientes_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], [])
+            save_table(f"Devoluciones_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"], [])
+            save_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], [])
+            save_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"], [])
+            save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
+            
+            st.success("¡Datos borrados con éxito! La app está como nueva para este perfil.")
+            st.rerun()
             
     st.divider()
     st.subheader("📄 Exportar Reporte")
