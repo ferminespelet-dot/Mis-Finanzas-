@@ -201,7 +201,6 @@ user_settings = load_config(f"settings_{sufijo}", {
 DIA_CIERRE = user_settings.get("dia_cierre", 28)
 DIVISA = user_settings.get("divisa", "ARS")
 simbolo_moneda = "$" if DIVISA == "ARS" else f"{DIVISA} "
-# Reemplazo del símbolo para evitar bugs de LaTeX en HTML:
 simbolo_html = "&#36;" if DIVISA == "ARS" else f"{DIVISA} "
 
 dolar_blue_venta = get_dolar_blue()
@@ -227,10 +226,10 @@ if "transactions" not in st.session_state:
     st.session_state.thoughts = load_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], json_cols=["mensajes"])
     st.session_state.wishlist = load_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"])
     
-    st.session_state.bolsillos = load_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto"])
+    st.session_state.bolsillos = load_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"])
     if not st.session_state.bolsillos:
-        st.session_state.bolsillos = [{"id": "b_default", "nombre": "Ahorro General", "ubicacion": "Cuenta DNI", "monto": 0.0}]
-        save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto"], st.session_state.bolsillos)
+        st.session_state.bolsillos = [{"id": "b_default", "nombre": "Ahorro General", "ubicacion": "Cuenta DNI", "monto": 0.0, "wishlist_id": ""}]
+        save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
 
     st.session_state.recomendacion_ia = ""
 
@@ -538,7 +537,7 @@ with tab_cerebro:
         st.info("Aún no tienes notas guardadas.")
 
 # ==============================================================
-# PESTAÑA 3: WISHLIST (IA ESTRUCTURADA EN TARJETAS)
+# PESTAÑA 3: WISHLIST 
 # ==============================================================
 with tab_wishlist:
     st.markdown("<h2 style='text-align:center;'>🎁 Lista de Deseos</h2>", unsafe_allow_html=True)
@@ -585,34 +584,30 @@ with tab_wishlist:
                 except Exception as e:
                     st.error(f"Error procesando los datos de la IA: {e}")
 
-    # Mostrar Resultados de IA en forma de TARJETAS LIMPIAS
     if "wishlist_ia_results" in st.session_state and st.session_state.wishlist_ia_results:
         data = st.session_state.wishlist_ia_results
         st.info(f"🤖 **Análisis de tu IA:** {data.get('analisis', '')}")
         
         st.markdown("#### 🛒 Opciones listas para guardar:")
         for idx, opc in enumerate(data.get("opciones", [])):
-            with st.container(border=True): # Crea el borde prolijo
+            with st.container(border=True):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.markdown(f"### 🛍️ {opc.get('origen', 'Opción')}")
                     st.markdown(f"**{opc.get('item', 'Producto')}**")
                     
-                    # Extracción segura de números
                     b_usd = float(opc.get('precio_base_usd', 0))
                     e_usd = float(opc.get('envio_usd', 0))
                     i_usd = float(opc.get('impuestos_usd', 0))
                     t_usd = float(opc.get('total_usd', 0))
                     t_ars = float(opc.get('total_ars', 0))
                     
-                    # Desglose en viñetas
                     st.markdown(f"""
                     * 📦 **Precio Base:** US$ {b_usd:,.2f}
                     * ✈️ **Envío:** US$ {e_usd:,.2f}
                     * 🏛️ **Imp./Aduana:** US$ {i_usd:,.2f}
                     """)
                     
-                    # Total formateado correctamente
                     str_ars = f"{t_ars:,.0f}".replace(",", ".")
                     st.markdown(f"#### 💰 Total Final: <span style='color:#10B981;'>{simbolo_html}{str_ars}</span> <span style='font-size:16px; color:#A0A0A0;'>(US&#36; {t_usd:,.2f})</span>", unsafe_allow_html=True)
                     st.caption(f"⏱️ **Entrega estimada:** {opc.get('tiempo_entrega', '')} | 📝 **Notas:** {opc.get('notas', '')}")
@@ -628,7 +623,7 @@ with tab_wishlist:
                             "notas": opc.get("notas", "")
                         })
                         save_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"], st.session_state.wishlist)
-                        st.session_state.wishlist_ia_results = None # Cierra la búsqueda al guardar
+                        st.session_state.wishlist_ia_results = None 
                         st.success("¡Agregado a tu lista de deseos!")
                         st.rerun()
 
@@ -658,7 +653,7 @@ with tab_wishlist:
     st.subheader("📌 Mis Deseos Guardados")
     if st.session_state.wishlist:
         for w in st.session_state.wishlist:
-            with st.container(border=True): # Tarjetas para los guardados también
+            with st.container(border=True): 
                 cw1, cw2 = st.columns([3, 1])
                 with cw1:
                     st.markdown(f"**{w['item']}**")
@@ -751,21 +746,29 @@ with tab_historial:
         st.info("Sin movimientos.")
 
 # ==============================================================
-# PESTAÑA 6: CICLOS Y BOLSILLOS
+# PESTAÑA 6: CICLOS Y BOLSILLOS (CON BARRA DE PROGRESO WISHLIST)
 # ==============================================================
 with tab_ciclos:
     st.subheader(f"📅 Cierre de Mes (Día {DIA_CIERRE})")
-    leftover = st.number_input("Saldo sobrante a guardar:", min_value=0.0, value=float(max(0, saldo_actual)), step=1000.0)
     
-    opciones_bolsillos = {b["id"]: b["nombre"] for b in st.session_state.bolsillos}
-    destino_id = st.selectbox("¿A qué bolsillo va?", options=list(opciones_bolsillos.keys()), format_func=lambda x: opciones_bolsillos[x])
+    # Armar opciones para destinar el sobrante usando los nombres actualizados
+    opc_sobrante = {}
+    for b in st.session_state.bolsillos:
+        d_name = b["nombre"]
+        if b.get("wishlist_id"):
+            wm = next((w for w in st.session_state.wishlist if w["id"] == b["wishlist_id"]), None)
+            if wm: d_name = f"Meta: {wm['item']}"
+        opc_sobrante[b["id"]] = d_name
+
+    leftover = st.number_input("Saldo sobrante a guardar:", min_value=0.0, value=float(max(0, saldo_actual)), step=1000.0)
+    destino_id = st.selectbox("¿A qué bolsillo va?", options=list(opc_sobrante.keys()), format_func=lambda x: opc_sobrante[x])
     
     if st.button("📥 Guardar en Bolsillo", use_container_width=True) and leftover > 0:
         for b in st.session_state.bolsillos:
             if b["id"] == destino_id:
                 b["monto"] += leftover
-        save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto"], st.session_state.bolsillos)
-        st.success(f"¡Guardado en {opciones_bolsillos[destino_id]}!")
+        save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
+        st.success(f"¡Guardado en {opc_sobrante[destino_id]}!")
         st.rerun()
 
     st.divider()
@@ -775,31 +778,80 @@ with tab_ciclos:
     
     with st.expander("➕ Crear nuevo bolsillo"):
         with st.form("new_pocket"):
-            n_bolsillo = st.text_input("Nombre (Ej: Vacaciones)")
+            # Opciones de Wishlist
+            wl_opts = [{"id": "", "label": "🚫 Sin meta (Ahorro Libre)"}] + [{"id": w["id"], "label": f"🎁 {w['item']}"} for w in st.session_state.wishlist]
+            wl_sel = st.selectbox("🎯 Vincular a Meta de Wishlist (Opcional)", options=[x["id"] for x in wl_opts], format_func=lambda x: next(item["label"] for item in wl_opts if item["id"] == x))
+            
+            n_bolsillo = st.text_input("Nombre (Solo si no elegiste meta arriba)", placeholder="Ej: Fondo de Emergencia")
             n_ubicacion = st.text_input("Ubicación Física (Ej: Mercado Pago, Caja Fuerte)")
-            if st.form_submit_button("Crear") and n_bolsillo:
-                st.session_state.bolsillos.append({"id": f"b_{datetime.datetime.now().strftime('%M%S%f')}", "nombre": n_bolsillo, "ubicacion": n_ubicacion, "monto": 0.0})
-                save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto"], st.session_state.bolsillos)
-                st.rerun()
+            
+            if st.form_submit_button("Crear Bolsillo"):
+                final_name = n_bolsillo
+                if wl_sel:
+                    wl_match = next((w for w in st.session_state.wishlist if w["id"] == wl_sel), None)
+                    if wl_match: final_name = wl_match["item"]
+                        
+                if not final_name and not wl_sel:
+                    st.error("Debes ponerle un nombre o seleccionar una meta.")
+                else:
+                    st.session_state.bolsillos.append({
+                        "id": f"b_{datetime.datetime.now().strftime('%M%S%f')}", 
+                        "nombre": final_name, 
+                        "ubicacion": n_ubicacion, 
+                        "monto": 0.0,
+                        "wishlist_id": wl_sel
+                    })
+                    save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
+                    st.rerun()
 
     for b in st.session_state.bolsillos:
-        st.markdown(f"**{b['nombre']}** - {simbolo_moneda}{b['monto']:,.0f}".replace(",", "."))
-        col_ed, col_mov = st.columns(2)
-        with col_ed:
-            nueva_ubi = st.text_input(f"Ubicación", value=b["ubicacion"], key=f"ubi_{b['id']}")
-            if nueva_ubi != b["ubicacion"]:
-                b["ubicacion"] = nueva_ubi
-                save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto"], st.session_state.bolsillos)
-        with col_mov:
-            mover = st.number_input("Mover plata", min_value=0.0, max_value=float(b["monto"]), key=f"mov_{b['id']}")
-            dest = st.selectbox("Destino", [x for x in opciones_bolsillos.keys() if x != b["id"]], format_func=lambda x: opciones_bolsillos[x], key=f"dest_{b['id']}")
-            if st.button("Transferir", key=f"btn_mov_{b['id']}") and mover > 0:
-                b["monto"] -= mover
-                for dest_b in st.session_state.bolsillos:
-                    if dest_b["id"] == dest: dest_b["monto"] += mover
-                save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto"], st.session_state.bolsillos)
-                st.rerun()
-        st.divider()
+        with st.container(border=True):
+            wl_id = b.get("wishlist_id", "")
+            display_name = b["nombre"]
+            target = 0
+            
+            if wl_id:
+                w_match = next((w for w in st.session_state.wishlist if w["id"] == wl_id), None)
+                if w_match:
+                    display_name = f"🎯 Meta: {w_match['item']}"
+                    target = float(w_match.get("precio_ars", 0))
+            
+            st.markdown(f"### {display_name}")
+            st.markdown(f"<h4 style='color:#10B981; margin-top:0px;'>{simbolo_html}{b['monto']:,.0f}</h4>".replace(",", "."), unsafe_allow_html=True)
+            
+            if target > 0:
+                prog_val = min(b["monto"] / target, 1.0)
+                st.progress(prog_val)
+                st.caption(f"🎯 Precio Meta: {simbolo_html}{target:,.0f} | 📈 Progreso: {prog_val*100:.1f}%".replace(",", "."))
+            
+            col_ed, col_mov = st.columns(2)
+            with col_ed:
+                nueva_ubi = st.text_input(f"📍 Ubicación", value=b.get("ubicacion", ""), key=f"ubi_{b['id']}")
+                
+                # Desplegable para editar la meta a posteriori
+                wl_opts = [{"id": "", "label": "🚫 Sin meta"}] + [{"id": w["id"], "label": f"🎁 {w['item']}"} for w in st.session_state.wishlist]
+                idx_actual = [x["id"] for x in wl_opts].index(wl_id) if wl_id in [x["id"] for x in wl_opts] else 0
+                nuevo_wl = st.selectbox("🎯 Editar Meta", options=[x["id"] for x in wl_opts], format_func=lambda x: next(item["label"] for item in wl_opts if item["id"] == x), index=idx_actual, key=f"wl_{b['id']}")
+                
+                if nueva_ubi != b.get("ubicacion", "") or nuevo_wl != wl_id:
+                    b["ubicacion"] = nueva_ubi
+                    b["wishlist_id"] = nuevo_wl
+                    if nuevo_wl:
+                        w_match2 = next((w for w in st.session_state.wishlist if w["id"] == nuevo_wl), None)
+                        if w_match2: b["nombre"] = w_match2["item"]
+                    save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
+                    st.rerun()
+                    
+            with col_mov:
+                mover = st.number_input("💸 Mover plata", min_value=0.0, max_value=float(b["monto"]), key=f"mov_{b['id']}")
+                dest = st.selectbox("Destino", [x for x in opc_sobrante.keys() if x != b["id"]], format_func=lambda x: opc_sobrante[x], key=f"dest_{b['id']}")
+                if st.button("Transferir", key=f"btn_mov_{b['id']}") and mover > 0:
+                    b["monto"] -= mover
+                    for dest_b in st.session_state.bolsillos:
+                        if dest_b["id"] == dest: dest_b["monto"] += mover
+                    save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
+                    st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
 
 # ==============================================================
 # PESTAÑA 7: CATEGORÍAS
