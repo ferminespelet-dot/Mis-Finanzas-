@@ -535,7 +535,7 @@ with tab_cerebro:
         st.info("Aún no tienes notas guardadas.")
 
 # ==============================================================
-# PESTAÑA 3: WISHLIST (IA BÚSQUEDA DE PRECIOS E INTEGRACIÓN)
+# PESTAÑA 3: WISHLIST (IA ESTRUCTURADA EN TARJETAS)
 # ==============================================================
 with tab_wishlist:
     st.markdown("<h2 style='text-align:center;'>🎁 Lista de Deseos</h2>", unsafe_allow_html=True)
@@ -550,23 +550,28 @@ with tab_wishlist:
         elif not search_query.strip():
             st.warning("Escribe un producto para buscar.")
         else:
-            with st.spinner("Analizando mercado, impuestos y armando opciones..."):
+            with st.spinner("Analizando mercado, impuestos y armando tarjetas..."):
                 try:
                     client = genai.Client(api_key=api_key)
                     prompt = f"""
                     Actúa como un experto en compras online para un argentino. El usuario busca comprar: '{search_query}'. 
                     El Dólar informal (Blue) está a ${dolar_blue_venta} ARS. 
-                    Calcula estimaciones realistas actuales. Evalúa comprarlo localmente (ej. Mercado Libre) vs importarlo (ej. Amazon/Tiendamia sumando 60% de impuestos de aduana).
+                    Calcula estimaciones realistas actuales. Evalúa comprarlo localmente (ej. Mercado Libre) vs importarlo (ej. Amazon/Tiendamia).
                     
                     Devuelve ESTRICTAMENTE un JSON con esta estructura exacta (sin comillas invertidas extra):
                     {{
-                        "analisis": "Texto breve comparando las opciones y recomendando la mejor.",
+                        "analisis": "Texto breve de 2 líneas comparando las opciones.",
                         "opciones": [
                             {{
-                                "item": "Nombre del producto y origen (Ej: PlayStation 5 - Importada Amazon)",
-                                "precio_ars": numero_entero_sin_simbolos,
-                                "precio_usd": numero_decimal_sin_simbolos,
-                                "notas": "Detalles breves (Ej: Incluye 60% imp. aduana)"
+                                "origen": "Mercado Libre (Local) o Importado (Amazon)",
+                                "item": "Nombre del producto exacto",
+                                "precio_base_usd": numero_decimal,
+                                "envio_usd": numero_decimal,
+                                "impuestos_usd": numero_decimal,
+                                "total_usd": numero_decimal,
+                                "total_ars": numero_entero,
+                                "tiempo_entrega": "Ej: 3 a 5 días",
+                                "notas": "Detalle extra muy breve"
                             }}
                         ]
                     }}
@@ -575,39 +580,56 @@ with tab_wishlist:
                     text_res = res.text.replace("```json", "").replace("```", "").strip()
                     st.session_state.wishlist_ia_results = json.loads(text_res)
                 except Exception as e:
-                    st.error(f"Error en la búsqueda o formato de IA: {e}")
+                    st.error(f"Error procesando los datos de la IA: {e}")
 
-    # Mostrar Resultados de IA si existen en memoria
+    # Mostrar Resultados de IA en forma de TARJETAS LIMPIAS
     if "wishlist_ia_results" in st.session_state and st.session_state.wishlist_ia_results:
         data = st.session_state.wishlist_ia_results
         st.info(f"🤖 **Análisis de tu IA:** {data.get('analisis', '')}")
         
         st.markdown("#### 🛒 Opciones listas para guardar:")
         for idx, opc in enumerate(data.get("opciones", [])):
-            with st.container():
+            with st.container(border=True): # Crea el borde prolijo
                 col1, col2 = st.columns([3, 1])
                 with col1:
+                    st.markdown(f"### 🛍️ {opc.get('origen', 'Opción')}")
                     st.markdown(f"**{opc.get('item', 'Producto')}**")
-                    p_ars = float(opc.get('precio_ars', 0))
-                    p_usd = float(opc.get('precio_usd', 0))
-                    st.markdown(f"<span style='color:#10B981; font-weight:bold;'>{simbolo_moneda}{p_ars:,.0f}</span> (US$ {p_usd:,.2f})".replace(",", "."), unsafe_allow_html=True)
-                    st.caption(f"📝 {opc.get('notas', '')}")
+                    
+                    # Extracción segura de números
+                    b_usd = float(opc.get('precio_base_usd', 0))
+                    e_usd = float(opc.get('envio_usd', 0))
+                    i_usd = float(opc.get('impuestos_usd', 0))
+                    t_usd = float(opc.get('total_usd', 0))
+                    t_ars = float(opc.get('total_ars', 0))
+                    
+                    # Desglose en viñetas
+                    st.markdown(f"""
+                    * 📦 **Precio Base:** US$ {b_usd:,.2f}
+                    * ✈️ **Envío:** US$ {e_usd:,.2f}
+                    * 🏛️ **Imp./Aduana:** US$ {i_usd:,.2f}
+                    """)
+                    
+                    # Total formateado correctamente
+                    str_ars = f"{t_ars:,.0f}".replace(",", ".")
+                    st.markdown(f"#### 💰 Total Final: <span style='color:#10B981;'>{simbolo_moneda}{str_ars}</span> <span style='font-size:16px; color:#A0A0A0;'>(US$ {t_usd:,.2f})</span>", unsafe_allow_html=True)
+                    st.caption(f"⏱️ **Entrega estimada:** {opc.get('tiempo_entrega', '')} | 📝 **Notas:** {opc.get('notas', '')}")
+                
                 with col2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("➕ Agregar", key=f"add_wl_ia_{idx}", use_container_width=True):
+                    st.markdown("<br><br><br><br>", unsafe_allow_html=True)
+                    if st.button("➕ Agregar a Wishlist", key=f"add_wl_ia_{idx}", use_container_width=True):
                         st.session_state.wishlist.append({
                             "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"),
-                            "item": opc.get("item", "Producto"),
-                            "precio_ars": p_ars,
-                            "precio_usd": p_usd,
+                            "item": f"{opc.get('item', 'Producto')} - {opc.get('origen', '')}",
+                            "precio_ars": t_ars,
+                            "precio_usd": t_usd,
                             "notas": opc.get("notas", "")
                         })
                         save_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"], st.session_state.wishlist)
-                        st.session_state.wishlist_ia_results = None # Limpia la búsqueda
+                        st.session_state.wishlist_ia_results = None # Cierra la búsqueda al guardar
                         st.success("¡Agregado a tu lista de deseos!")
                         st.rerun()
-            st.divider()
 
+    st.divider()
     with st.expander("➕ Añadir a la Wishlist manualmente"):
         with st.form("manual_wl"):
             c1, c2 = st.columns(2)
@@ -633,15 +655,22 @@ with tab_wishlist:
     st.subheader("📌 Mis Deseos Guardados")
     if st.session_state.wishlist:
         for w in st.session_state.wishlist:
-            st.markdown(f"**{w['item']}**")
-            st.markdown(f"<span style='color:#10B981; font-weight:bold;'>{simbolo_moneda}{float(w.get('precio_ars', 0)):,.0f}</span> (US$ {float(w.get('precio_usd', 0)):,.2f})".replace(",", "."), unsafe_allow_html=True)
-            if w.get('notas'):
-                st.caption(f"📝 {w['notas']}")
-            if st.button("🗑️ Eliminar", key=f"del_w_{w['id']}"):
-                st.session_state.wishlist = [i for i in st.session_state.wishlist if i["id"] != w["id"]]
-                save_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"], st.session_state.wishlist)
-                st.rerun()
-            st.divider()
+            with st.container(border=True): # Tarjetas para los guardados también
+                cw1, cw2 = st.columns([3, 1])
+                with cw1:
+                    st.markdown(f"**{w['item']}**")
+                    ars_val = float(w.get('precio_ars', 0))
+                    usd_val = float(w.get('precio_usd', 0))
+                    str_ars = f"{ars_val:,.0f}".replace(",", ".")
+                    st.markdown(f"<h4 style='color:#10B981; margin-top:0px;'>{simbolo_moneda}{str_ars} <span style='font-size:14px; color:#A0A0A0;'>(US$ {usd_val:,.2f})</span></h4>", unsafe_allow_html=True)
+                    if w.get('notas'):
+                        st.caption(f"📝 {w['notas']}")
+                with cw2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🗑️ Eliminar", key=f"del_w_{w['id']}", use_container_width=True):
+                        st.session_state.wishlist = [i for i in st.session_state.wishlist if i["id"] != w["id"]]
+                        save_table(f"Wishlist_{sufijo}", ["id", "item", "precio_ars", "precio_usd", "notas"], st.session_state.wishlist)
+                        st.rerun()
     else:
         st.info("Tu lista de deseos está vacía.")
 
