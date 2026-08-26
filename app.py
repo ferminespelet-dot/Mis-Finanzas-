@@ -268,7 +268,7 @@ total_ahorrado = sum(float(b.get("monto", 0)) for b in st.session_state.bolsillo
 saldo_real = saldo_bancario_bruto - total_ahorrado
 
 saldo_ciclo = total_ingresos - total_gastos
-# El sobrante pasado aísla el saldo de meses anteriores, protegiendo si estás en positivo este mes
+# El sobrante pasado aísla el saldo de meses anteriores
 saldo_anterior_disponible = max(0, saldo_real - max(0, saldo_ciclo))
 
 tot_pendientes = sum([p["monto"] for p in st.session_state.pendings if p.get("estado") == "pendiente"])
@@ -314,10 +314,22 @@ def formatear_tarjeta_movimiento(tx):
     """, unsafe_allow_html=True)
 
 # ==============================================================
-# PESTAÑA 1: REGISTRO
+# PESTAÑA 1: REGISTRO (ABRE POR DEFECTO)
 # ==============================================================
 with tab_registro:
-    st.markdown("### 🎙️ Nuevo Registro")
+    # --------------------------------------------------------
+    # NUEVO: Título y Saldo en la misma línea
+    col_titulo, col_saldo = st.columns([2, 1])
+    with col_titulo:
+        st.markdown("### 🎙️ Nuevo Registro")
+    with col_saldo:
+        st.markdown(f"""
+        <div style='text-align: right; background-color: rgba(16, 185, 129, 0.1); padding: 8px; border-radius: 8px; color: #10B981; font-weight: bold; margin-top: 15px;'>
+            Saldo: {simbolo_html}{saldo_real:,.0f}
+        </div>
+        """.replace(",", "."), unsafe_allow_html=True)
+    # --------------------------------------------------------
+    
     user_input = st.text_area("Registro", placeholder="Ej: Supermercado 20000, se pagó mitad y mitad...", height=100, label_visibility="collapsed")
     
     col1, col2 = st.columns(2)
@@ -426,9 +438,9 @@ with tab_registro:
     
     st.divider()
     col1, col2, col3 = st.columns(3)
-    col1.metric("Saldo Total Diario", f"{simbolo_moneda}{saldo_real:,.0f}".replace(",", "."))
-    col2.metric("Saldo Neto (Proyectado)", f"{simbolo_moneda}{saldo_neto:,.0f}".replace(",", "."))
-    col3.metric("Gastos Ciclo Actual", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
+    col1.metric("Saldo Real", f"{simbolo_moneda}{saldo_real:,.0f}".replace(",", "."))
+    col2.metric("Saldo Neto", f"{simbolo_moneda}{saldo_neto:,.0f}".replace(",", "."))
+    col3.metric("Gastos Ciclo", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
 
 # ==============================================================
 # PESTAÑA 2: SEGUNDO CEREBRO
@@ -768,31 +780,32 @@ with tab_ciclos:
     st.markdown(f"**Disponible de meses anteriores:** <span style='color:#10B981; font-weight:bold;'>{simbolo_html}{saldo_anterior_disponible:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
     st.caption("*(Tu sueldo del ciclo actual está protegido y no se puede guardar hasta el próximo cierre)*")
 
-    # Armar opciones para destinar el sobrante usando los nombres actualizados
-    opc_sobrante = {"saldo_principal": "⏪ Devolver al Saldo Principal"}
+    # 1. Menú SOLO para guardar en bolsillos (No incluye Saldo Principal)
+    opc_bolsillos_solo = {}
     for b in st.session_state.bolsillos:
         d_name = b["nombre"]
         if b.get("wishlist_id"):
             wm = next((w for w in st.session_state.wishlist if w["id"] == b["wishlist_id"]), None)
             if wm: d_name = f"Meta: {wm['item']}"
-        opc_sobrante[b["id"]] = d_name
+        opc_bolsillos_solo[b["id"]] = d_name
 
-    leftover = st.number_input("Monto a mover:", min_value=0.0, value=float(saldo_anterior_disponible), step=1000.0)
-    destino_id = st.selectbox("¿A dónde querés enviarlo?", options=list(opc_sobrante.keys()), format_func=lambda x: opc_sobrante[x])
+    # 2. Menú de opciones de destino PARA MOVER desde un bolsillo (SÍ incluye Saldo Principal)
+    opc_mover_desde_bolsillo = {"saldo_principal": "⏪ Devolver al Saldo Principal"}
+    opc_mover_desde_bolsillo.update(opc_bolsillos_solo)
+
+    leftover = st.number_input("Monto a mover:", min_value=0.0, max_value=float(saldo_anterior_disponible), value=float(saldo_anterior_disponible), step=1000.0)
+    destino_id = st.selectbox("¿A dónde querés enviarlo?", options=list(opc_bolsillos_solo.keys()), format_func=lambda x: opc_bolsillos_solo[x])
     
-    # Solo mostramos el botón de guardar si no se seleccionó "devolver al saldo principal"
-    # Porque esa opción es solo para transferencias DESDE un bolsillo
-    if destino_id != "saldo_principal":
-        if st.button("📥 Guardar en Bolsillo", use_container_width=True) and leftover > 0:
-            if leftover > saldo_anterior_disponible:
-                st.warning("Estás intentando guardar más plata de la que tenés libre de meses anteriores.")
-            else:
-                for b in st.session_state.bolsillos:
-                    if b["id"] == destino_id:
-                        b["monto"] += leftover
-                save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
-                st.success(f"¡Guardado en {opc_sobrante[destino_id]}!")
-                st.rerun()
+    if st.button("📥 Guardar en Bolsillo", use_container_width=True) and leftover > 0:
+        if leftover > saldo_anterior_disponible:
+            st.warning("Estás intentando guardar más plata de la que tenés libre de meses anteriores.")
+        else:
+            for b in st.session_state.bolsillos:
+                if b["id"] == destino_id:
+                    b["monto"] += leftover
+            save_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto", "wishlist_id"], st.session_state.bolsillos)
+            st.success(f"¡Guardado en {opc_bolsillos_solo[destino_id]}!")
+            st.rerun()
 
     st.divider()
     st.subheader("💰 Mis Bolsillos (Alcancía)")
@@ -800,7 +813,6 @@ with tab_ciclos:
     
     with st.expander("➕ Crear nuevo bolsillo"):
         with st.form("new_pocket"):
-            # Opciones de Wishlist
             wl_opts = [{"id": "", "label": "🚫 Sin meta (Ahorro Libre)"}] + [{"id": w["id"], "label": f"🎁 {w['item']}"} for w in st.session_state.wishlist]
             wl_sel = st.selectbox("🎯 Vincular a Meta de Wishlist (Opcional)", options=[x["id"] for x in wl_opts], format_func=lambda x: next(item["label"] for item in wl_opts if item["id"] == x))
             
@@ -865,11 +877,12 @@ with tab_ciclos:
                     
             with col_mov:
                 mover = st.number_input("💸 Mover plata", min_value=0.0, max_value=float(b["monto"]), key=f"mov_{b['id']}")
-                dest = st.selectbox("Destino", [x for x in opc_sobrante.keys() if x != b["id"]], format_func=lambda x: opc_sobrante[x], key=f"dest_{b['id']}")
+                # Aca usamos el menú que SÍ tiene la opción de volver al Saldo Principal
+                dest = st.selectbox("Destino", [x for x in opc_mover_desde_bolsillo.keys() if x != b["id"]], format_func=lambda x: opc_mover_desde_bolsillo[x], key=f"dest_{b['id']}")
                 if st.button("Transferir", key=f"btn_mov_{b['id']}") and mover > 0:
                     b["monto"] -= mover
                     if dest == "saldo_principal":
-                        # Al descontarle monto al bolsillo, sube el Saldo Real automáticamente
+                        # Ya se descontó del bolsillo, al no sumarlo a otro, el saldo real de la app sube automáticamente
                         pass
                     else:
                         for dest_b in st.session_state.bolsillos:
@@ -880,7 +893,6 @@ with tab_ciclos:
             if b["id"] != "b_default":
                 st.divider()
                 if st.button("🗑️ Eliminar este bolsillo", key=f"del_b_{b['id']}", use_container_width=True):
-                    # Pasa el saldo sobrante al Ahorro General
                     for def_b in st.session_state.bolsillos:
                         if def_b["id"] == "b_default":
                             def_b["monto"] += b["monto"]
