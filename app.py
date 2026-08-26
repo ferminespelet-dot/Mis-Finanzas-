@@ -271,10 +271,9 @@ st.caption(f"Faltan **{max(0, dias_faltantes)} días** para el final de tu ciclo
 if now.day == DIA_CIERRE:
     st.warning(f"💰 **¡Es día de cierre!** Revisa tus saldos y mueve tu sobrante a los bolsillos en la pestaña 'Ciclos'.")
 
-# ORDEN DE PESTAÑAS (Cerebro a la izquierda, abre en Registro por defecto)
 tab_cerebro, tab_registro, tab_balance, tab_historial, tab_ciclos, tab_categorias, tab_ajustes = st.tabs([
     "🧠 Cerebro", "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "⚙️ Ajustes"
-], default="💬 Registro")
+])
 
 def formatear_tarjeta_movimiento(tx):
     color = "#10B981" if tx["tipo"] == "ingreso" else "#EF4444"
@@ -366,7 +365,12 @@ with tab_cerebro:
     st.divider()
     
     if st.session_state.thoughts:
-        hilos_ordenados = sorted(st.session_state.thoughts, key=lambda x: x["id"], reverse=True)
+        # PARCHE DE SEGURIDAD PARA EL ORDENAMIENTO (Forzamos a que el ID se lea como string)
+        hilos_ordenados = sorted(
+            [t for t in st.session_state.thoughts if isinstance(t, dict)], 
+            key=lambda x: str(x.get("id", "")), 
+            reverse=True
+        )
         for t in hilos_ordenados:
             with st.expander(f"{t['titulo']}  (Creado: {t['creado'][:10]})"):
                 with st.popover("📄 Ver texto completo (Para copiar)"):
@@ -413,7 +417,7 @@ with tab_cerebro:
         st.info("Aún no tienes notas guardadas.")
 
 # ==============================================================
-# PESTAÑA 2: REGISTRO (Abre por defecto)
+# PESTAÑA 2: REGISTRO
 # ==============================================================
 with tab_registro:
     st.markdown("### 🎙️ Nuevo Registro")
