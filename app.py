@@ -158,7 +158,6 @@ if st.session_state.usuario_autenticado is None:
                 st.session_state.login_user_selected = "Irina"
                 st.rerun()
     else:
-        # Sistema de seguridad opcional (si el usuario prendió el PIN en ajustes)
         usuario_intento = st.session_state.login_user_selected
         sufijo_intento = "Fermin" if usuario_intento == "Fermín" else "Irina"
         ajustes_intento = load_config(f"settings_{sufijo_intento}", {"usar_pin": False, "pin": ""})
@@ -188,7 +187,6 @@ usuario = st.session_state.usuario_autenticado
 sufijo = "Fermin" if usuario == "Fermín" else "Irina"
 otro_sufijo = "Irina" if usuario == "Fermín" else "Fermin"
 
-# Cargar configuraciones personales (Día de cierre y Divisa)
 user_settings = load_config(f"settings_{sufijo}", {
     "dia_cierre": 28 if usuario == "Fermín" else 22,
     "divisa": "ARS",
@@ -201,14 +199,17 @@ simbolo_moneda = "$" if DIVISA == "ARS" else f"{DIVISA} "
 
 def obtener_categorias_iniciales(usr):
     base = {
+        "Fútbol y Cancha": ["futbol", "cancha", "entrada", "estadio"],
+        "Paseos y Salidas": ["paseo", "salidas", "cine"],
         "Supermercado": ["supermercado", "super", "almacén", "verdulería"],
         "Comida y Delivery": ["comida", "hamburguesa", "pizza", "delivery"],
         "Transporte": ["sube", "colectivo", "tren", "uber", "taxi", "nafta"],
         "Otros": ["varios"]
     }
+    if usr == "Fermín": base["Irina"] = ["irina", "novia", "regalos"]
+    else: base["Fermín"] = ["fermin", "novio", "regalos"]
     return base
 
-# Carga de Tablas
 if "transactions" not in st.session_state:
     st.session_state.categories = load_config(f"categorias_{sufijo}", obtener_categorias_iniciales(usuario))
     st.session_state.transactions = load_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"])
@@ -216,7 +217,6 @@ if "transactions" not in st.session_state:
     st.session_state.returns = load_table(f"Devoluciones_{sufijo}", ["id", "concepto", "monto", "fecha", "estado"])
     st.session_state.thoughts = load_table(f"Cerebro_{sufijo}", ["id", "titulo", "categoria", "creado", "mensajes"], json_cols=["mensajes"])
     
-    # Sistema de alcancía con bolsillos
     st.session_state.bolsillos = load_table(f"Bolsillos_{sufijo}", ["id", "nombre", "ubicacion", "monto"])
     if not st.session_state.bolsillos:
         st.session_state.bolsillos = [{"id": "b_default", "nombre": "Ahorro General", "ubicacion": "Cuenta DNI", "monto": 0.0}]
@@ -270,11 +270,47 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "💬 Registro", "📊 Balance", "📜 Historial", "📅 Ciclos", "🏷️ Categorías", "🧠 Cerebro", "⚙️ Ajustes"
 ])
 
+# Funciones UI
+def formatear_tarjeta_movimiento(tx):
+    color = "#10B981" if tx["tipo"] == "ingreso" else "#EF4444"
+    signo = "+" if tx["tipo"] == "ingreso" else "-"
+    monto_str = f"{signo} {simbolo_moneda}{tx['monto']:,.0f}".replace(",", ".")
+    cat = str(tx.get("categoria", "Otros")).capitalize()
+    desc = str(tx.get("descripcion", "")).capitalize()
+    fecha_formateada = tx['timestamp'][:16].replace("-", "/")
+    
+    st.markdown(f"""
+    <div style="padding: 12px; border-radius: 10px; border: 1px solid rgba(217, 119, 6, 0.2); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; background-color: rgba(217, 119, 6, 0.02);">
+        <div style="overflow: hidden; padding-right: 10px;">
+            <strong style="font-size: 16px; color: #E0E0E0;">{desc}</strong><br>
+            <span style="color: #A0A0A0; font-size: 13px;">{cat} • {fecha_formateada}</span>
+        </div>
+        <div style="color: {color}; font-weight: bold; font-size: 17px; white-space: nowrap;">
+            {monto_str}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # ==============================================================
 # PESTAÑA 1: REGISTRO (CON MITAD Y MITAD)
 # ==============================================================
 with tab1:
-    st.markdown("### 🎙️ Registro Rápido")
+    # WIDGET ESTILO MERCADO PAGO
+    st.subheader("⏱️ Última Actividad")
+    if st.session_state.transactions:
+        tx_ordenadas = sorted(st.session_state.transactions, key=lambda x: x['timestamp'], reverse=True)
+        formatear_tarjeta_movimiento(tx_ordenadas[0])
+        
+        if len(tx_ordenadas) > 1:
+            with st.expander("Ver otros recientes..."):
+                for tx in tx_ordenadas[1:5]:
+                    formatear_tarjeta_movimiento(tx)
+    else:
+        st.info("Aún no tienes movimientos.")
+    
+    st.divider()
+
+    st.markdown("### 🎙️ Nuevo Registro")
     user_input = st.text_area("Registro", placeholder="Ej: Supermercado 20000, se pagó mitad y mitad...", height=100, label_visibility="collapsed")
     
     col1, col2 = st.columns(2)
@@ -312,7 +348,6 @@ with tab1:
                     st.session_state.transactions.append(tx_propia)
                     save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
                     
-                    # MAGIA: ESCRIBIR EN EL EXCEL DEL OTRO USUARIO
                     if is_split:
                         tabla_otro = load_table(f"Gastos_{otro_sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"])
                         tabla_otro.append(tx_propia)
@@ -325,10 +360,9 @@ with tab1:
 
     st.divider()
     
-    # PENDIENTES Y DEVOLUCIONES
     col_izq, col_der = st.columns(2)
     with col_izq:
-        st.subheader("📌 Pagos Pendientes")
+        st.subheader("📌 Pendientes")
         with st.expander("➕ Agregar pago"):
             with st.form("pending_form", clear_on_submit=True):
                 p_concepto = st.text_input("Concepto")
@@ -339,7 +373,7 @@ with tab1:
                     st.rerun()
 
         for row in [p for p in st.session_state.pendings if p.get("estado") == "pendiente"]:
-            st.markdown(f"**{row['concepto']}** - {simbolo_moneda}{row['monto']:,.0f}")
+            st.markdown(f"**{row['concepto']}**<br><span style='color:#EF4444;'>- {simbolo_moneda}{row['monto']:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
             if st.button("✅ Pagado", key=f"p_{row['id']}"):
                 st.session_state.transactions.append({"timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tipo": "gasto", "monto": row["monto"], "descripcion": f"Pago: {row['concepto']}", "categoria": "Otros"})
                 save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
@@ -350,7 +384,7 @@ with tab1:
 
     with col_der:
         st.subheader("📥 Devoluciones")
-        with st.expander("➕ Agregar devolución"):
+        with st.expander("➕ Agregar cobro"):
             with st.form("return_form", clear_on_submit=True):
                 r_concepto = st.text_input("Concepto")
                 r_monto = st.number_input("Monto", min_value=0.0)
@@ -360,7 +394,7 @@ with tab1:
                     st.rerun()
 
         for row in [r for r in st.session_state.returns if r.get("estado") == "pendiente"]:
-            st.markdown(f"**{row['concepto']}** - {simbolo_moneda}{row['monto']:,.0f}")
+            st.markdown(f"**{row['concepto']}**<br><span style='color:#10B981;'>+ {simbolo_moneda}{row['monto']:,.0f}</span>".replace(",", "."), unsafe_allow_html=True)
             if st.button("📥 Devuelto", key=f"r_{row['id']}"):
                 st.session_state.transactions.append({"timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tipo": "ingreso", "monto": row["monto"], "descripcion": f"Devolución: {row['concepto']}", "categoria": "Devoluciones"})
                 save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
@@ -370,9 +404,9 @@ with tab1:
             st.divider()
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Saldo Real", f"{simbolo_moneda}{saldo_actual:,.0f}")
-    col2.metric("Saldo Neto", f"{simbolo_moneda}{saldo_neto:,.0f}")
-    col3.metric("Gastos Ciclo", f"{simbolo_moneda}{total_gastos:,.0f}")
+    col1.metric("Saldo Real", f"{simbolo_moneda}{saldo_actual:,.0f}".replace(",", "."))
+    col2.metric("Saldo Neto", f"{simbolo_moneda}{saldo_neto:,.0f}".replace(",", "."))
+    col3.metric("Gastos Ciclo", f"{simbolo_moneda}{total_gastos:,.0f}".replace(",", "."))
 
 # ==============================================================
 # PESTAÑA 2: BALANCE
@@ -382,26 +416,50 @@ with tab2:
     if not df_cycle.empty and not df_cycle[df_cycle["tipo"] == "gasto"].empty:
         df_g = df_cycle[df_cycle["tipo"] == "gasto"].groupby("categoria")["monto"].sum().reset_index().sort_values(by="monto", ascending=False)
         fig = px.pie(df_g, values="monto", names="categoria", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set1)
+        # Formateo con puntos en lugar de comas
         fig.update_traces(textinfo='label+value', texttemplate=f'%{{label}}: {simbolo_moneda}%{{value:,.0f}}')
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No hay gastos registrados en este ciclo mensual.")
 
 # ==============================================================
-# PESTAÑA 3: HISTORIAL
+# PESTAÑA 3: HISTORIAL (EMBELLECIDO)
 # ==============================================================
 with tab3:
     st.subheader("📜 Todos los Movimientos")
     if not df_cycle.empty:
         q = st.text_input("🔍 Buscar por palabra clave")
-        df_show = df_cycle[["timestamp", "tipo", "categoria", "descripcion", "monto"]].sort_values(by="timestamp", ascending=False)
+        df_show = df_cycle.copy().sort_values(by="timestamp", ascending=False)
+        
         if q:
             filtro_desc = df_show["descripcion"].str.contains(q, case=False, na=False)
             filtro_cat = df_show["categoria"].str.contains(q, case=False, na=False)
             df_show = df_show[filtro_desc | filtro_cat]
-        st.dataframe(df_show, use_container_width=True)
+            
+        # Preparar datos bonitos para la tabla
+        df_display = df_show.copy()
+        df_display["Fecha"] = pd.to_datetime(df_display["timestamp"]).dt.strftime("%d/%m/%Y %H:%M")
+        df_display["Categoría"] = df_display["categoria"].str.capitalize()
+        df_display["Descripción"] = df_display["descripcion"].str.capitalize()
         
-        if st.button("🗑️ Borrar último"):
+        def format_monto(row):
+            if row["tipo"] == "ingreso": return f"+ {simbolo_moneda}{row['monto']:,.0f}".replace(",", ".")
+            else: return f"- {simbolo_moneda}{row['monto']:,.0f}".replace(",", ".")
+                
+        df_display["Monto"] = df_display.apply(format_monto, axis=1)
+        df_display = df_display[["Fecha", "Categoría", "Descripción", "Monto"]]
+        
+        # Aplicar colores con Pandas Styler
+        def color_monto_col(val):
+            if isinstance(val, str):
+                if val.startswith('+'): return 'color: #10B981; font-weight: bold;'
+                if val.startswith('-'): return 'color: #EF4444; font-weight: bold;'
+            return ''
+            
+        styled_df = df_display.style.map(color_monto_col, subset=['Monto'])
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        
+        if st.button("🗑️ Borrar último movimiento"):
             st.session_state.transactions.pop()
             save_table(f"Gastos_{sufijo}", ["timestamp", "tipo", "monto", "descripcion", "categoria"], st.session_state.transactions)
             st.rerun()
@@ -429,7 +487,7 @@ with tab4:
     st.divider()
     st.subheader("💰 Mis Bolsillos (Alcancía)")
     total_ahorrado = sum(b["monto"] for b in st.session_state.bolsillos)
-    st.metric("Total Ahorrado", f"{simbolo_moneda}{total_ahorrado:,.0f}")
+    st.metric("Total Ahorrado", f"{simbolo_moneda}{total_ahorrado:,.0f}".replace(",", "."))
     
     with st.expander("➕ Crear nuevo bolsillo"):
         with st.form("new_pocket"):
@@ -441,7 +499,7 @@ with tab4:
                 st.rerun()
 
     for b in st.session_state.bolsillos:
-        st.markdown(f"**{b['nombre']}** - {simbolo_moneda}{b['monto']:,.0f}")
+        st.markdown(f"**{b['nombre']}** - {simbolo_moneda}{b['monto']:,.0f}".replace(",", "."))
         col_ed, col_mov = st.columns(2)
         with col_ed:
             nueva_ubi = st.text_input(f"Ubicación", value=b["ubicacion"], key=f"ubi_{b['id']}")
